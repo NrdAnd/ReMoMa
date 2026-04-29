@@ -17,7 +17,7 @@ The repository is divided into sequential modules that reflect the data processi
 
 ### 📂 2. GLASSO Network Modeling
 *Network construction via precision matrix estimation.*
-- **Main Files:** `glasso_v4_lag20.ipynb`, glasso_v5_lag20.ipynb and `glassoLagComparison.ipynb`
+- **Main Files:** `glasso_v4_lag20.ipynb`, `glasso_v5_lag20.ipynb` and `glassoLagComparison.ipynb`
 - **Description:** Applies the Graphical Lasso to extract sparse networks of conditional dependencies among LOB features. Includes an advanced comparative analysis on the impact of temporal memory (Lag Comparison) and generates interactive 3D visualizations of market dynamics.
 
 ### 📂 3. TMFG Topological Filtering
