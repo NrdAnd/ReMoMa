@@ -78,11 +78,13 @@ class LOBDataset(Dataset):
         bid_vols   = window_rev[:, _BID_V_COLS].T
 
         if self.price_stats is not None:
-            eps = 1e-8
-            ask_prices = (ask_prices - self.price_stats["ask_mean"][:, None]) \
-                         / (self.price_stats["ask_std"][:, None] + eps)
-            bid_prices = (bid_prices - self.price_stats["bid_mean"][:, None]) \
-                         / (self.price_stats["bid_std"][:, None] + eps)
+            # Normalize prices relative to current mid-price (lag=0).
+            # Result is in basis points (×10⁻⁴), scale-free and robust
+            # to near-zero variance in deep levels.
+            mid = (ask_prices[0, 0] + bid_prices[0, 0]) / 2.0  # scalar
+            mid = max(mid, 1.0)
+            ask_prices = (ask_prices - mid) / mid
+            bid_prices = (bid_prices - mid) / mid
 
         ask_vols_b, bid_vols_b = self.binner.transform_window(ask_vols, bid_vols)
 
@@ -94,4 +96,5 @@ class LOBDataset(Dataset):
         x[1510:, 0] = bid_prices.ravel()
         x[1510:, 1] = bid_vols_b.ravel()
 
+        np.nan_to_num(x, copy=False, nan=0.0, posinf=0.0, neginf=0.0)
         return torch.from_numpy(x)

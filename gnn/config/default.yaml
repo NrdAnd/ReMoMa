@@ -20,21 +20,21 @@ data:
   normalize_prices: true
 
 model:
-  type: gat             # 'gcn', 'gat', 'sage'
-  hidden_channels: 64
-  num_layers: 3
+  type: gcn             # 'gcn', 'gat', 'sage'  ← gcn è 3-5x più veloce di gat
+  hidden_channels: 32
+  num_layers: 2
   dropout: 0.3
-  num_heads: 4          # GAT only
+  num_heads: 2          # GAT only
 
 training:
   epochs: 100
-  batch_size: 32
+  batch_size: 64
   lr: 1.0e-3
   weight_decay: 1.0e-4
   early_stopping_patience: 15
   grad_clip: 1.0
   use_class_weights: true
-  num_workers: 0
+  num_workers: 4        # parallelizza il data loading su CPU
   seed: 42
 
 paths:

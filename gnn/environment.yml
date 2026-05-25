@@ -1,0 +1,16 @@
+name: lob-gnn
+channels:
+  - pytorch
+  - nvidia
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.10
+  - pip
+  - pip:
+      - torch==2.2.0
+      - pandas
+      - numpy
+      - scikit-learn
+      - tqdm
+      - pyyaml

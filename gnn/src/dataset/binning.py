@@ -68,7 +68,7 @@ class VolumeBinner:
 
     @staticmethod
     def _discretize(values: np.ndarray, edges: np.ndarray) -> np.ndarray:
-        n_bins = len(edges) - 1
+        n_bins = max(len(edges) - 1, 1)
         idx = np.searchsorted(edges[1:-1], values, side="right").astype(np.float32)
         return idx / n_bins
 
