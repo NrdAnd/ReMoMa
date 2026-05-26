@@ -5,6 +5,7 @@ from pathlib import Path
 import numpy as np
 import torch
 import torch.nn as nn
+from sklearn.metrics import f1_score
 from torch_geometric.loader import DataLoader
 from tqdm import tqdm
 
@@ -38,24 +39,26 @@ class Trainer:
         epochs: int,
     ) -> dict:
         history: dict[str, list] = {
-            "train_loss": [], "val_loss": [], "train_acc": [], "val_acc": []
+            "train_loss": [], "val_loss": [],
+            "train_acc": [], "val_acc": [], "val_f1": [],
         }
-        best_val_loss = float("inf")
+        best_val_f1 = 0.0
         patience_cnt = 0
 
         epoch_bar = tqdm(range(1, epochs + 1), desc="Training", unit="ep")
         for epoch in epoch_bar:
             tr_loss, tr_acc = self._train_epoch(train_loader)
-            va_loss, va_acc = self._eval_epoch(val_loader)
+            va_loss, va_acc, va_f1 = self._eval_epoch(val_loader)
             self.scheduler.step(va_loss)
 
             history["train_loss"].append(tr_loss)
             history["val_loss"].append(va_loss)
             history["train_acc"].append(tr_acc)
             history["val_acc"].append(va_acc)
+            history["val_f1"].append(va_f1)
 
-            if va_loss < best_val_loss:
-                best_val_loss = va_loss
+            if va_f1 > best_val_f1:
+                best_val_f1 = va_f1
                 patience_cnt = 0
                 torch.save(self.model.state_dict(), self.checkpoint_dir / "best.pt")
                 tag = " *"
@@ -65,12 +68,12 @@ class Trainer:
 
             epoch_bar.set_postfix(
                 tr_loss=f"{tr_loss:.4f}", tr_acc=f"{tr_acc:.3f}",
-                va_loss=f"{va_loss:.4f}", va_acc=f"{va_acc:.3f}",
+                va_loss=f"{va_loss:.4f}", va_f1=f"{va_f1:.3f}",
             )
             tqdm.write(
                 f"Ep {epoch:03d} | "
                 f"train {tr_loss:.4f}/{tr_acc:.3f} | "
-                f"val {va_loss:.4f}/{va_acc:.3f}{tag}"
+                f"val {va_loss:.4f}/acc={va_acc:.3f}/f1={va_f1:.3f}{tag}"
             )
 
             if patience_cnt >= self.patience:
@@ -101,9 +104,11 @@ class Trainer:
         return total_loss / total, correct / total
 
     @torch.no_grad()
-    def _eval_epoch(self, loader: DataLoader) -> tuple[float, float]:
+    def _eval_epoch(self, loader: DataLoader) -> tuple[float, float, float]:
         self.model.eval()
-        total_loss = correct = total = 0
+        total_loss = 0
+        all_preds: list = []
+        all_labels: list = []
 
         for batch in tqdm(loader, desc="  val  ", leave=False, unit="batch"):
             batch = batch.to(self.device)
@@ -111,10 +116,15 @@ class Trainer:
             loss = self.criterion(out, batch.y)
 
             total_loss += loss.item() * batch.num_graphs
-            correct += (out.argmax(1) == batch.y).sum().item()
-            total += batch.num_graphs
+            all_preds.extend(out.argmax(1).cpu().numpy())
+            all_labels.extend(batch.y.cpu().numpy())
 
-        return total_loss / total, correct / total
+        preds  = np.array(all_preds)
+        labels = np.array(all_labels)
+        avg_loss = total_loss / len(labels)
+        acc = (preds == labels).mean()
+        f1  = f1_score(labels, preds, average="macro", zero_division=0)
+        return avg_loss, acc, f1
 
     @torch.no_grad()
     def predict(self, loader: DataLoader) -> tuple[np.ndarray, np.ndarray]:

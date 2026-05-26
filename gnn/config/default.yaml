@@ -5,10 +5,10 @@ data:
   n_lags: 150          # lags from 0 to 150 → 151 time steps per node
   n_levels: 10
   n_volume_bins: 2000
-  price_type: mid           # 'mid' (mid-price) or 'micro' (microprice)
-  threshold: 1.0e-4         # pct change threshold for flat/up/down
-                            # tip: use threshold=0 with price_type=micro for balanced classes
-  prediction_horizon: 10    # k: label = direction of price[t+k] vs price[t]
+  price_type: micro         # 'mid' (mid-price) or 'micro' (microprice)
+  threshold: 0              # pct change threshold for flat/up/down
+                            # micro + threshold=0 + k=1 → ~33/33/34% balanced classes
+  prediction_horizon: 1     # k: label = direction of price[t+k] vs price[t]
 
   split_strategy: by_lag    # 'by_file' or 'by_lag'
   # used by by_file:
@@ -35,7 +35,7 @@ training:
   weight_decay: 1.0e-4
   early_stopping_patience: 15
   grad_clip: 1.0
-  use_class_weights: true
+  use_class_weights: false  # micro + threshold=0 → classi bilanciate, non serve
   num_workers: 8        # parallelizza il data loading su CPU
   seed: 42
 
