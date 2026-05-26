@@ -20,7 +20,8 @@ class GCN(GNNClassifier):
         super().__init__()
         self.dropout = dropout
 
-        dims = [in_channels] + [hidden_channels] * num_layers
+        self.node_encoder = nn.Linear(in_channels, hidden_channels)
+        dims = [hidden_channels] * (num_layers + 1)
         self.convs = nn.ModuleList(
             GCNConv(dims[i], dims[i + 1]) for i in range(num_layers)
         )
@@ -37,6 +38,7 @@ class GCN(GNNClassifier):
     def forward(self, data: Data) -> Tensor:
         x, edge_index, batch = data.x, data.edge_index, data.batch
 
+        x = F.relu(self.node_encoder(x))
         for conv, norm in zip(self.convs, self.norms):
             x = conv(x, edge_index)
             x = norm(x)

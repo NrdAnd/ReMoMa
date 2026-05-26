@@ -39,7 +39,7 @@ def main(config_path: str, checkpoint_path: str) -> None:
     print("Loading LOB files...")
     files = discover_files(cfg["data"]["raw_dir"])
     all_data = [load_lobster_csv(f) for f in files]
-    all_labels = [compute_labels(d, cfg["data"]["threshold"], k) for d in all_data]
+    all_labels = [compute_labels(d, cfg["data"]["threshold"], k, cfg["data"].get("price_type", "mid")) for d in all_data]
 
     test_file_indices = cfg["data"]["test_files"]
     test_s = np.concatenate([

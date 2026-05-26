@@ -136,8 +136,9 @@ def main(config_path: str) -> None:
         print(f"  {f.name}: {d.shape[0]:,} ticks")
 
     # ── Labels ─────────────────────────────────────────────────
-    threshold = cfg["data"]["threshold"]
-    all_labels = [compute_labels(d, threshold, k) for d in all_data]
+    threshold   = cfg["data"]["threshold"]
+    price_type  = cfg["data"].get("price_type", "mid")
+    all_labels  = [compute_labels(d, threshold, k, price_type) for d in all_data]
 
     # ── Split ──────────────────────────────────────────────────
     strategy = cfg["data"]["split_strategy"]
@@ -193,6 +194,8 @@ def main(config_path: str) -> None:
     loader_kw = dict(
         batch_size=cfg["training"]["batch_size"],
         num_workers=cfg["training"].get("num_workers", 0),
+        pin_memory=True,
+        persistent_workers=cfg["training"].get("num_workers", 0) > 0,
     )
     train_loader = DataLoader(train_ds, shuffle=True,  **loader_kw)
     val_loader   = DataLoader(val_ds,   shuffle=False, **loader_kw)

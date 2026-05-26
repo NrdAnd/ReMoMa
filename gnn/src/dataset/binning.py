@@ -12,8 +12,8 @@ _BID_VOL_COLS = np.arange(3, 40, 4)   # [3, 7, 11, ..., 39]  BidVol_L1..L10
 class VolumeBinner:
     """Quantile-based discretizer for LOB volume columns.
 
-    Fits 20 independent binners: one per (side, level) pair.
-    Outputs normalized bin indices in [0, 1] as float32.
+    Fits a single global binner on all volume values across all levels and
+    sides. Outputs normalized bin indices in [0, 1] as float32.
 
     Bin edges are computed on training data only — must call fit() before
     transform_window(), and only on training split data to avoid leakage.
@@ -21,26 +21,20 @@ class VolumeBinner:
 
     def __init__(self, n_bins: int = 2000):
         self.n_bins = n_bins
-        self._ask_edges: list[np.ndarray] | None = None   # 10 arrays
-        self._bid_edges: list[np.ndarray] | None = None   # 10 arrays
+        self._edges: np.ndarray | None = None   # single shared bin edge array
 
     def fit(self, data_list: list[np.ndarray]) -> "VolumeBinner":
-        """Fit quantile edges on training data.
+        """Fit global quantile edges on all volume columns of training data.
 
         Args:
             data_list: list of [N_i, 40] float32 arrays (training files only).
         """
         all_data = np.concatenate(data_list, axis=0)
-        percentiles = np.linspace(0, 100, self.n_bins + 1)
+        all_vol_cols = np.concatenate([_ASK_VOL_COLS, _BID_VOL_COLS])
+        all_vols = all_data[:, all_vol_cols].astype(np.float64).ravel()
 
-        self._ask_edges = [
-            np.unique(np.percentile(all_data[:, col].astype(np.float64), percentiles))
-            for col in _ASK_VOL_COLS
-        ]
-        self._bid_edges = [
-            np.unique(np.percentile(all_data[:, col].astype(np.float64), percentiles))
-            for col in _BID_VOL_COLS
-        ]
+        percentiles = np.linspace(0, 100, self.n_bins + 1)
+        self._edges = np.unique(np.percentile(all_vols, percentiles))
         return self
 
     def transform_window(
@@ -57,33 +51,24 @@ class VolumeBinner:
         Returns:
             Tuple of two [n_levels, n_lags+1] float32 arrays, values in [0, 1].
         """
-        ask_out = np.empty_like(ask_vols, dtype=np.float32)
-        bid_out = np.empty_like(bid_vols, dtype=np.float32)
+        return (
+            self._discretize(ask_vols),
+            self._discretize(bid_vols),
+        )
 
-        for i in range(ask_vols.shape[0]):
-            ask_out[i] = self._discretize(ask_vols[i], self._ask_edges[i])
-            bid_out[i] = self._discretize(bid_vols[i], self._bid_edges[i])
-
-        return ask_out, bid_out
-
-    @staticmethod
-    def _discretize(values: np.ndarray, edges: np.ndarray) -> np.ndarray:
-        n_bins = max(len(edges) - 1, 1)
-        idx = np.searchsorted(edges[1:-1], values, side="right").astype(np.float32)
+    def _discretize(self, values: np.ndarray) -> np.ndarray:
+        n_bins = max(len(self._edges) - 1, 1)
+        idx = np.searchsorted(self._edges[1:-1], values, side="right").astype(np.float32)
         return idx / n_bins
 
     def save(self, path: str | Path) -> None:
         with open(path, "wb") as f:
-            pickle.dump(
-                {"n_bins": self.n_bins, "ask": self._ask_edges, "bid": self._bid_edges},
-                f,
-            )
+            pickle.dump({"n_bins": self.n_bins, "edges": self._edges}, f)
 
     @classmethod
     def load(cls, path: str | Path) -> "VolumeBinner":
         with open(path, "rb") as f:
             state = pickle.load(f)
         binner = cls(n_bins=state["n_bins"])
-        binner._ask_edges = state["ask"]
-        binner._bid_edges = state["bid"]
+        binner._edges = state["edges"]
         return binner

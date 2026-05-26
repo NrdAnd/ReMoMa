@@ -1,5 +1,3 @@
-from __future__ import annotations
-
 import numpy as np
 import torch
 from torch_geometric.data import Data, Dataset

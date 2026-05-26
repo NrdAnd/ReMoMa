@@ -121,7 +121,7 @@ class Trainer:
         self.model.eval()
         all_preds, all_labels = [], []
 
-        for batch in loader:
+        for batch in tqdm(loader, desc="  predict", leave=False, unit="batch"):
             batch = batch.to(self.device)
             all_preds.extend(self.model(batch).argmax(1).cpu().numpy())
             all_labels.extend(batch.y.cpu().numpy())

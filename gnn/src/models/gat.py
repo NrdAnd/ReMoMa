@@ -21,15 +21,17 @@ class GAT(GNNClassifier):
         super().__init__()
         self.dropout = dropout
 
+        self.node_encoder = nn.Linear(in_channels, hidden_channels)
+
         self.convs = nn.ModuleList()
         self.norms = nn.ModuleList()
 
         if num_layers == 1:
-            self.convs.append(GATConv(in_channels, hidden_channels, heads=1, dropout=dropout, concat=False))
+            self.convs.append(GATConv(hidden_channels, hidden_channels, heads=1, dropout=dropout, concat=False))
             self.norms.append(nn.BatchNorm1d(hidden_channels))
         else:
-            # First layer: in → hidden * heads
-            self.convs.append(GATConv(in_channels, hidden_channels, heads=num_heads, dropout=dropout, concat=True))
+            # First layer: hidden → hidden * heads
+            self.convs.append(GATConv(hidden_channels, hidden_channels, heads=num_heads, dropout=dropout, concat=True))
             self.norms.append(nn.BatchNorm1d(hidden_channels * num_heads))
 
             # Intermediate layers: hidden*heads → hidden*heads
@@ -51,6 +53,7 @@ class GAT(GNNClassifier):
     def forward(self, data: Data) -> Tensor:
         x, edge_index, batch = data.x, data.edge_index, data.batch
 
+        x = F.relu(self.node_encoder(x))
         for conv, norm in zip(self.convs, self.norms):
             x = conv(x, edge_index)
             x = norm(x)
