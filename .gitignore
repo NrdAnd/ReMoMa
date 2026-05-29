@@ -3,3 +3,4 @@ tmfg/tmfg_colorato.html
 tmfg/cisco_tmfg_adj_matrix_2000_bins.csv
 tmfg/tmfg_adj_matrix_cisco_2000_bins.csv
 /gnn/src/models/__pycache__
+/lobster_cisco

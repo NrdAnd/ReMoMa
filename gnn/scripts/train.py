@@ -15,7 +15,7 @@ import numpy as np
 import torch
 import yaml
 from torch.optim.lr_scheduler import ReduceLROnPlateau
-from torch_geometric.loader import DataLoader
+from torch.utils.data import DataLoader
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
@@ -38,6 +38,63 @@ def set_seed(seed: int) -> None:
     torch.manual_seed(seed)
     if torch.cuda.is_available():
         torch.cuda.manual_seed_all(seed)
+
+
+class LOBBatch:
+    """Batch container leggero: evita la ricalcolazione degli offset edge_index per ogni batch.
+
+    Tutti i grafi LOB condividono la stessa struttura (stesso TMFG edge_index),
+    quindi il batched edge_index è identico per ogni batch di uguali dimensioni.
+    """
+    __slots__ = ("x", "edge_index", "batch", "y", "num_graphs")
+
+    def __init__(self, x, edge_index, batch, y, num_graphs):
+        self.x          = x
+        self.edge_index = edge_index
+        self.batch      = batch
+        self.y          = y
+        self.num_graphs = num_graphs
+
+    def to(self, device):
+        return LOBBatch(
+            x          = self.x.to(device, non_blocking=True),
+            edge_index = self.edge_index.to(device, non_blocking=True),
+            batch      = self.batch.to(device, non_blocking=True),
+            y          = self.y.to(device, non_blocking=True),
+            num_graphs = self.num_graphs,
+        )
+
+
+def make_collate_fn(edge_index: torch.Tensor, batch_size: int, num_nodes: int):
+    """Crea una collate_fn con edge_index batched precomputato per batch interi.
+
+    Risparmia ~O(batch_size × num_edges) operazioni di offset ad ogni batch.
+    Per batch parziali (ultimo batch di val/test) ricade sul calcolo on-the-fly.
+    """
+    N = batch_size
+    offsets = torch.arange(N, dtype=torch.long) * num_nodes          # [N]
+    # [2, E, 1] + [1, 1, N] → [2, E, N] → [2, N, E] → [2, N*E]
+    batched_ei = (
+        edge_index.unsqueeze(2) + offsets.view(1, 1, N)
+    ).permute(0, 2, 1).reshape(2, -1).contiguous()
+    batch_vec = torch.arange(N, dtype=torch.long).repeat_interleave(num_nodes).contiguous()
+
+    def _collate(data_list):
+        n = len(data_list)
+        x = torch.cat([d.x for d in data_list])
+        y = torch.stack([d.y for d in data_list])
+
+        if n == N:
+            ei, bv = batched_ei, batch_vec
+        else:
+            # Ultimo batch parziale (val/test): calcolo on-the-fly
+            offs = torch.arange(n, dtype=torch.long) * num_nodes
+            ei   = (edge_index.unsqueeze(2) + offs.view(1, 1, n)).permute(0, 2, 1).reshape(2, -1).contiguous()
+            bv   = torch.arange(n, dtype=torch.long).repeat_interleave(num_nodes).contiguous()
+
+        return LOBBatch(x=x, edge_index=ei, batch=bv, y=y, num_graphs=n)
+
+    return _collate
 
 
 def _make_samples(file_indices: list[int], all_data: list[np.ndarray], n_lags: int, k: int) -> np.ndarray:
@@ -191,15 +248,18 @@ def main(config_path: str) -> None:
     val_ds   = LOBDataset(val_s,   **ds_kwargs)
     test_ds  = LOBDataset(test_s,  **ds_kwargs)
 
+    num_nodes  = 2 * cfg["data"]["n_levels"] * (n_lags + 1)   # 2*10*151 = 3020
+    collate_fn = make_collate_fn(edge_index, cfg["training"]["batch_size"], num_nodes)
+
     loader_kw = dict(
         batch_size=cfg["training"]["batch_size"],
         num_workers=cfg["training"].get("num_workers", 0),
-        pin_memory=True,
         persistent_workers=cfg["training"].get("num_workers", 0) > 0,
+        collate_fn=collate_fn,
     )
-    train_loader = DataLoader(train_ds, shuffle=True,  **loader_kw)
-    val_loader   = DataLoader(val_ds,   shuffle=False, **loader_kw)
-    test_loader  = DataLoader(test_ds,  shuffle=False, **loader_kw)
+    train_loader = DataLoader(train_ds, shuffle=True,  drop_last=True,  **loader_kw)
+    val_loader   = DataLoader(val_ds,   shuffle=False, drop_last=False, **loader_kw)
+    test_loader  = DataLoader(test_ds,  shuffle=False, drop_last=False, **loader_kw)
 
     # ── Model ──────────────────────────────────────────────────
     print(f"\n[4/5] Initializing model ({cfg['model']['type'].upper()})...")
