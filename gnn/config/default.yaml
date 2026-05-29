@@ -1,5 +1,5 @@
 data:
-  raw_dir: ../../lobster_cisco
+  raw_dir: ../lobster_cisco
   adj_matrix_path: ../tmfg/tmfg_adj_matrix_250_bins.csv
   processed_dir: data/processed
   n_lags: 150          # lags from 0 to 150 → 151 time steps per node
