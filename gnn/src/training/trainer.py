@@ -6,7 +6,6 @@ import numpy as np
 import torch
 import torch.nn as nn
 from sklearn.metrics import f1_score
-from torch_geometric.loader import DataLoader
 from tqdm import tqdm
 
 
@@ -21,6 +20,8 @@ class Trainer:
         checkpoint_dir: str | Path,
         patience: int = 15,
         grad_clip: float = 1.0,
+        static_graph_batching: bool = False,
+        static_edge_index: torch.Tensor | None = None,
     ):
         self.model = model
         self.optimizer = optimizer
@@ -30,12 +31,16 @@ class Trainer:
         self.checkpoint_dir = Path(checkpoint_dir)
         self.patience = patience
         self.grad_clip = grad_clip
+        self.static_graph_batching = static_graph_batching
+        self.static_edge_index = static_edge_index
+        if self.static_graph_batching and self.static_edge_index is None:
+            raise ValueError("static_edge_index is required when static_graph_batching=True")
         self.checkpoint_dir.mkdir(parents=True, exist_ok=True)
 
     def fit(
         self,
-        train_loader: DataLoader,
-        val_loader: DataLoader,
+        train_loader,
+        val_loader,
         epochs: int,
     ) -> dict:
         history: dict[str, list] = {
@@ -82,14 +87,28 @@ class Trainer:
 
         return history
 
-    def _train_epoch(self, loader: DataLoader) -> tuple[float, float]:
+    def _forward_batch(self, batch):
+        if self.static_graph_batching:
+            x, y = batch
+            x = x.to(self.device, non_blocking=True)
+            y = y.to(self.device, non_blocking=True)
+            out = self.model.forward_static(x, self.static_edge_index)
+            num_graphs = int(y.shape[0])
+            return out, y, num_graphs
+
+        batch = batch.to(self.device)
+        out = self.model(batch)
+        y = batch.y
+        num_graphs = int(batch.num_graphs)
+        return out, y, num_graphs
+
+    def _train_epoch(self, loader) -> tuple[float, float]:
         self.model.train()
         total_loss = correct = total = 0
 
         for batch in tqdm(loader, desc="  train", leave=False, unit="batch"):
-            batch = batch.to(self.device)
-            out = self.model(batch)
-            loss = self.criterion(out, batch.y)
+            out, y, num_graphs = self._forward_batch(batch)
+            loss = self.criterion(out, y)
 
             self.optimizer.zero_grad()
             loss.backward()
@@ -97,27 +116,26 @@ class Trainer:
                 torch.nn.utils.clip_grad_norm_(self.model.parameters(), self.grad_clip)
             self.optimizer.step()
 
-            total_loss += loss.item() * batch.num_graphs
-            correct += (out.argmax(1) == batch.y).sum().item()
-            total += batch.num_graphs
+            total_loss += loss.item() * num_graphs
+            correct += (out.argmax(1) == y).sum().item()
+            total += num_graphs
 
         return total_loss / total, correct / total
 
     @torch.no_grad()
-    def _eval_epoch(self, loader: DataLoader) -> tuple[float, float, float]:
+    def _eval_epoch(self, loader) -> tuple[float, float, float]:
         self.model.eval()
         total_loss = 0
         all_preds: list = []
         all_labels: list = []
 
         for batch in tqdm(loader, desc="  val  ", leave=False, unit="batch"):
-            batch = batch.to(self.device)
-            out = self.model(batch)
-            loss = self.criterion(out, batch.y)
+            out, y, num_graphs = self._forward_batch(batch)
+            loss = self.criterion(out, y)
 
-            total_loss += loss.item() * batch.num_graphs
+            total_loss += loss.item() * num_graphs
             all_preds.extend(out.argmax(1).cpu().numpy())
-            all_labels.extend(batch.y.cpu().numpy())
+            all_labels.extend(y.cpu().numpy())
 
         preds  = np.array(all_preds)
         labels = np.array(all_labels)
@@ -127,14 +145,14 @@ class Trainer:
         return avg_loss, acc, f1
 
     @torch.no_grad()
-    def predict(self, loader: DataLoader) -> tuple[np.ndarray, np.ndarray]:
+    def predict(self, loader) -> tuple[np.ndarray, np.ndarray]:
         self.model.eval()
         all_preds, all_labels = [], []
 
         for batch in tqdm(loader, desc="  predict", leave=False, unit="batch"):
-            batch = batch.to(self.device)
-            all_preds.extend(self.model(batch).argmax(1).cpu().numpy())
-            all_labels.extend(batch.y.cpu().numpy())
+            out, y, _ = self._forward_batch(batch)
+            all_preds.extend(out.argmax(1).cpu().numpy())
+            all_labels.extend(y.cpu().numpy())
 
         return np.array(all_preds), np.array(all_labels)
 

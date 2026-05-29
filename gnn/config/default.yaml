@@ -1,7 +1,11 @@
 data:
   raw_dir: ../lobster_cisco
-  adj_matrix_path: ../tmfg/tmfg_adj_matrix_250_bins.csv
+  adj_matrix_path: ../tmfg/cisco_tmfg_adj_matrix_2000_bins.csv
   processed_dir: data/processed
+  use_precomputed: true      # train/eval read mmap tensors from processed_dir
+  force_preprocess: false    # true -> rebuild processed tensors even if cache matches
+  preprocess_chunk_size: 2048
+  feature_dtype: float16     # disk dtype for X_*.npy (runtime cast to float32)
   n_lags: 150          # lags from 0 to 150 → 151 time steps per node
   n_levels: 10
   n_volume_bins: 2000
@@ -16,8 +20,8 @@ data:
   val_files: [3]
   test_files: [4]
   # used by by_lag:
-  train_ratio: 0.05
-  val_ratio: 0.02
+  train_ratio: 0.70
+  val_ratio: 0.15
 
   normalize_prices: true
 
@@ -29,8 +33,9 @@ model:
   num_heads: 2          # GAT only
 
 training:
-  epochs: 100
+  epochs: 3
   batch_size: 256
+  static_graph_batching: true  # true: GCN-only static tensor path
   lr: 1.0e-3
   weight_decay: 1.0e-4
   early_stopping_patience: 15

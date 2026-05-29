@@ -46,3 +46,27 @@ class GCN(GNNClassifier):
             x = F.dropout(x, p=self.dropout, training=self.training)
 
         return self.head(global_mean_pool(x, batch))
+
+    def forward_static(self, x_batch: Tensor, edge_index: Tensor) -> Tensor:
+        """Static-graph forward path for batched node features.
+
+        Args:
+            x_batch:    [B, N, F] node features.
+            edge_index: [2, E] shared topology for all batch elements.
+        Returns:
+            [B, num_classes] logits.
+        """
+        # node_encoder applies independently across trailing feature dim.
+        x = F.relu(self.node_encoder(x_batch))  # [B, N, H]
+
+        for conv, norm in zip(self.convs, self.norms):
+            # GCNConv supports static mode with x shaped [B, N, H].
+            x = conv(x, edge_index)  # [B, N, H]
+            # BatchNorm1d expects channel dim in position 1 for 3D input.
+            x = norm(x.transpose(1, 2)).transpose(1, 2)
+            x = F.relu(x)
+            x = F.dropout(x, p=self.dropout, training=self.training)
+
+        # Equivalent to graph-level global mean pool when every graph has N nodes.
+        graph_emb = x.mean(dim=1)
+        return self.head(graph_emb)

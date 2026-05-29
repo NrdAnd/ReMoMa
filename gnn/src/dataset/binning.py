@@ -57,6 +57,8 @@ class VolumeBinner:
         )
 
     def _discretize(self, values: np.ndarray) -> np.ndarray:
+        if self._edges is None:
+            raise RuntimeError("VolumeBinner is not fitted. Call fit() or load() before transform.")
         n_bins = max(len(self._edges) - 1, 1)
         idx = np.searchsorted(self._edges[1:-1], values, side="right").astype(np.float32)
         return idx / n_bins

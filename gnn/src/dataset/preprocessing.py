@@ -1,0 +1,443 @@
+from __future__ import annotations
+
+import json
+from pathlib import Path
+from typing import Any
+
+import numpy as np
+from numpy.lib.format import open_memmap
+
+from src.dataset.binning import VolumeBinner
+from src.dataset.labeling import compute_labels
+from src.utils.io import discover_files, load_lobster_csv
+
+# LOBSTER 40-column layout (10 levels, ask/bid, price/volume)
+_ASK_P_COLS = np.arange(0, 40, 4)
+_BID_P_COLS = np.arange(2, 40, 4)
+_ASK_V_COLS = np.arange(1, 40, 4)
+_BID_V_COLS = np.arange(3, 40, 4)
+
+
+def _make_samples(
+    file_indices: list[int],
+    all_data: list[np.ndarray],
+    n_lags: int,
+    k: int,
+) -> np.ndarray:
+    """Vectorized construction of (file_idx, t) sample pairs."""
+    parts = []
+    for fi in file_indices:
+        t_start = n_lags
+        t_end = len(all_data[fi]) - 1 - k  # inclusive
+        n = t_end - t_start + 1
+        if n <= 0:
+            continue
+        parts.append(
+            np.stack(
+                [
+                    np.full(n, fi, dtype=np.int32),
+                    np.arange(t_start, t_end + 1, dtype=np.int32),
+                ],
+                axis=1,
+            )
+        )
+    if not parts:
+        return np.empty((0, 2), dtype=np.int32)
+    return np.concatenate(parts, axis=0)
+
+
+def split_by_file(
+    all_data: list[np.ndarray],
+    cfg: dict[str, Any],
+    n_lags: int,
+    k: int,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Split using explicit file index groups."""
+    return (
+        _make_samples(cfg["data"]["train_files"], all_data, n_lags, k),
+        _make_samples(cfg["data"]["val_files"], all_data, n_lags, k),
+        _make_samples(cfg["data"]["test_files"], all_data, n_lags, k),
+    )
+
+
+def split_by_lag(
+    all_data: list[np.ndarray],
+    cfg: dict[str, Any],
+    n_lags: int,
+    k: int,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Split each file by contiguous time windows (train/val/test)."""
+    r_train = cfg["data"]["train_ratio"]
+    r_val = cfg["data"]["val_ratio"]
+    train_parts, val_parts, test_parts = [], [], []
+
+    for fi, data in enumerate(all_data):
+        t_start = n_lags
+        t_end = len(data) - 1 - k
+        n = t_end - t_start + 1
+        if n <= 0:
+            continue
+        t1 = t_start + int(r_train * n)
+        t2 = t_start + int((r_train + r_val) * n)
+
+        def _block(a: int, b: int) -> np.ndarray:
+            m = b - a
+            if m <= 0:
+                return np.empty((0, 2), dtype=np.int32)
+            return np.stack(
+                [np.full(m, fi, dtype=np.int32), np.arange(a, b, dtype=np.int32)],
+                axis=1,
+            )
+
+        train_parts.append(_block(t_start, t1))
+        val_parts.append(_block(t1, t2))
+        test_parts.append(_block(t2, t_end + 1))
+
+    def _cat(parts: list[np.ndarray]) -> np.ndarray:
+        parts = [p for p in parts if len(p) > 0]
+        if not parts:
+            return np.empty((0, 2), dtype=np.int32)
+        return np.concatenate(parts, axis=0)
+
+    return _cat(train_parts), _cat(val_parts), _cat(test_parts)
+
+
+def build_price_stats(train_files: list[int], all_data: list[np.ndarray]) -> dict[str, np.ndarray]:
+    """Legacy artifact kept for compatibility with older checkpoints/scripts."""
+    data = np.concatenate([all_data[i] for i in train_files], axis=0)
+    return {
+        "ask_mean": data[:, _ASK_P_COLS].mean(0).astype(np.float32),
+        "ask_std": data[:, _ASK_P_COLS].std(0).astype(np.float32),
+        "bid_mean": data[:, _BID_P_COLS].mean(0).astype(np.float32),
+        "bid_std": data[:, _BID_P_COLS].std(0).astype(np.float32),
+    }
+
+
+def build_processed_paths(processed_dir: str | Path) -> dict[str, Path]:
+    root = Path(processed_dir)
+    return {
+        "dir": root,
+        "X_train": root / "X_train.npy",
+        "y_train": root / "y_train.npy",
+        "X_val": root / "X_val.npy",
+        "y_val": root / "y_val.npy",
+        "X_test": root / "X_test.npy",
+        "y_test": root / "y_test.npy",
+        "binner": root / "binner.pkl",
+        "price_stats": root / "price_stats.npy",
+        "meta": root / "meta.json",
+    }
+
+
+def preprocess_signature(cfg: dict[str, Any]) -> dict[str, Any]:
+    """Configuration subset that defines processed-dataset semantics."""
+    data_cfg = cfg["data"]
+    split = data_cfg["split_strategy"]
+    sig: dict[str, Any] = {
+        "n_lags": int(data_cfg["n_lags"]),
+        "n_levels": int(data_cfg["n_levels"]),
+        "n_volume_bins": int(data_cfg["n_volume_bins"]),
+        "prediction_horizon": int(data_cfg.get("prediction_horizon", 1)),
+        "threshold": float(data_cfg["threshold"]),
+        "price_type": str(data_cfg.get("price_type", "mid")),
+        "split_strategy": split,
+        "normalize_prices": bool(data_cfg.get("normalize_prices", True)),
+        "feature_dtype": str(data_cfg.get("feature_dtype", "float16")),
+    }
+    if split == "by_file":
+        sig["train_files"] = [int(x) for x in data_cfg["train_files"]]
+        sig["val_files"] = [int(x) for x in data_cfg["val_files"]]
+        sig["test_files"] = [int(x) for x in data_cfg["test_files"]]
+    elif split == "by_lag":
+        sig["train_ratio"] = float(data_cfg["train_ratio"])
+        sig["val_ratio"] = float(data_cfg["val_ratio"])
+    else:
+        raise ValueError(f"Unknown split_strategy '{split}'")
+    return sig
+
+
+def has_compatible_processed_dataset(cfg: dict[str, Any]) -> bool:
+    """Return True if all processed artifacts exist and match config signature."""
+    paths = build_processed_paths(cfg["data"]["processed_dir"])
+    needed = [
+        paths["X_train"],
+        paths["y_train"],
+        paths["X_val"],
+        paths["y_val"],
+        paths["X_test"],
+        paths["y_test"],
+        paths["binner"],
+        paths["meta"],
+    ]
+    if not all(p.exists() for p in needed):
+        return False
+
+    try:
+        with open(paths["meta"], "r", encoding="utf-8") as f:
+            meta = json.load(f)
+    except (OSError, json.JSONDecodeError):
+        return False
+
+    if meta.get("signature") != preprocess_signature(cfg):
+        return False
+
+    current_files = [p.name for p in discover_files(cfg["data"]["raw_dir"])]
+    saved_files = meta.get("raw_files")
+    if isinstance(saved_files, list) and saved_files and current_files and saved_files != current_files:
+        return False
+
+    return True
+
+
+def _extract_chunk_features(
+    data: np.ndarray,
+    t_idx: np.ndarray,
+    n_lags: int,
+    binner: VolumeBinner,
+    normalize_prices: bool,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    """Build feature blocks for a chunk of timestamps with vectorized indexing.
+
+    Returns flattened arrays for ask/bid prices and binned volumes, each shaped
+    [chunk_size, 10*151] with node ordering level-major then lag-major.
+    """
+    # idx[b, k] = timestamp for lag k (k=0 => t, k=n_lags => oldest)
+    lags = np.arange(n_lags + 1, dtype=np.intp)[None, :]
+    idx = t_idx[:, None].astype(np.intp) - lags
+    windows = data[idx]  # [B, n_lags+1, 40]
+
+    ask_prices = windows[:, :, _ASK_P_COLS].transpose(0, 2, 1)
+    bid_prices = windows[:, :, _BID_P_COLS].transpose(0, 2, 1)
+    ask_vols = windows[:, :, _ASK_V_COLS].transpose(0, 2, 1)
+    bid_vols = windows[:, :, _BID_V_COLS].transpose(0, 2, 1)
+
+    if normalize_prices:
+        mid = (ask_prices[:, 0, 0] + bid_prices[:, 0, 0]) * 0.5
+        np.maximum(mid, 1.0, out=mid)
+        mid = mid[:, None, None]
+        ask_prices = (ask_prices - mid) / mid
+        bid_prices = (bid_prices - mid) / mid
+
+    ask_vols_b, bid_vols_b = binner.transform_window(ask_vols, bid_vols)
+    b = len(t_idx)
+    return (
+        ask_prices.reshape(b, -1),
+        ask_vols_b.reshape(b, -1),
+        bid_prices.reshape(b, -1),
+        bid_vols_b.reshape(b, -1),
+    )
+
+
+def _write_split_memmap(
+    split_name: str,
+    samples: np.ndarray,
+    all_data: list[np.ndarray],
+    all_labels: list[np.ndarray],
+    binner: VolumeBinner,
+    out_x_path: Path,
+    out_y_path: Path,
+    n_lags: int,
+    n_levels: int,
+    normalize_prices: bool,
+    feature_dtype: np.dtype,
+    chunk_size: int,
+    verbose: bool,
+) -> None:
+    """Materialize one split to disk-backed .npy arrays."""
+    n_samples = len(samples)
+    n_nodes = 2 * n_levels * (n_lags + 1)
+    half = n_levels * (n_lags + 1)
+
+    x_mm = open_memmap(out_x_path, mode="w+", dtype=feature_dtype, shape=(n_samples, n_nodes, 2))
+    y_mm = open_memmap(out_y_path, mode="w+", dtype=np.int64, shape=(n_samples,))
+
+    cursor = 0
+    if n_samples > 0:
+        _, first_idx = np.unique(samples[:, 0], return_index=True)
+        unique_files = samples[np.sort(first_idx), 0]
+    else:
+        unique_files = np.array([], dtype=np.int32)
+    for fi in unique_files:
+        file_mask = samples[:, 0] == fi
+        t_all = samples[file_mask, 1].astype(np.intp, copy=False)
+        labels = all_labels[int(fi)][t_all]
+        data = all_data[int(fi)]
+
+        y_mm[cursor:cursor + len(t_all)] = labels
+
+        for s in range(0, len(t_all), chunk_size):
+            e = min(s + chunk_size, len(t_all))
+            t_chunk = t_all[s:e]
+            ask_p, ask_v_b, bid_p, bid_v_b = _extract_chunk_features(
+                data=data,
+                t_idx=t_chunk,
+                n_lags=n_lags,
+                binner=binner,
+                normalize_prices=normalize_prices,
+            )
+
+            out = x_mm[cursor + s:cursor + e]
+            out[:, :half, 0] = ask_p
+            out[:, :half, 1] = ask_v_b
+            out[:, half:, 0] = bid_p
+            out[:, half:, 1] = bid_v_b
+            np.nan_to_num(out, copy=False, nan=0.0, posinf=0.0, neginf=0.0)
+
+        cursor += len(t_all)
+        if verbose:
+            print(f"  {split_name}: file {int(fi)} -> {len(t_all):,} samples")
+
+    x_mm.flush()
+    y_mm.flush()
+    del x_mm, y_mm
+
+
+def preprocess_to_disk(
+    cfg: dict[str, Any],
+    *,
+    force: bool = False,
+    chunk_size: int | None = None,
+    verbose: bool = True,
+) -> dict[str, Path]:
+    """Build mmap-backed processed splits once and store them on disk.
+
+    This function performs all expensive feature assembly offline:
+      - lag-window extraction
+      - micro/mid label generation
+      - volume binning
+      - node feature tensor assembly [3020, 2]
+
+    The resulting .npy arrays are memory-mappable and can be consumed directly
+    during training with near-zero CPU preprocessing overhead.
+    """
+    data_cfg = cfg["data"]
+    paths = build_processed_paths(data_cfg["processed_dir"])
+    paths["dir"].mkdir(parents=True, exist_ok=True)
+
+    if not force and has_compatible_processed_dataset(cfg):
+        if verbose:
+            print("Using existing compatible processed dataset.")
+        return paths
+
+    raw_files = discover_files(data_cfg["raw_dir"])
+    if not raw_files:
+        raise FileNotFoundError(f"No LOBSTER files found in '{data_cfg['raw_dir']}'")
+
+    if verbose:
+        print("Loading raw LOBSTER files...")
+    all_data = [load_lobster_csv(f) for f in raw_files]
+    if verbose:
+        for f, d in zip(raw_files, all_data):
+            print(f"  {f.name}: {d.shape[0]:,} ticks")
+
+    n_lags = int(data_cfg["n_lags"])
+    n_levels = int(data_cfg["n_levels"])
+    if n_levels != len(_ASK_P_COLS):
+        raise ValueError(
+            f"n_levels={n_levels} is not supported by this 40-column loader; "
+            f"expected {len(_ASK_P_COLS)}."
+        )
+    k = int(data_cfg.get("prediction_horizon", 1))
+    threshold = float(data_cfg["threshold"])
+    price_type = str(data_cfg.get("price_type", "mid"))
+    normalize_prices = bool(data_cfg.get("normalize_prices", True))
+    feature_dtype = np.dtype(data_cfg.get("feature_dtype", "float16"))
+    chunk = int(chunk_size or data_cfg.get("preprocess_chunk_size", 2048))
+
+    if verbose:
+        print("Computing labels...")
+    all_labels = [compute_labels(d, threshold, k, price_type) for d in all_data]
+
+    strategy = data_cfg["split_strategy"]
+    if strategy == "by_file":
+        train_s, val_s, test_s = split_by_file(all_data, cfg, n_lags, k)
+    elif strategy == "by_lag":
+        train_s, val_s, test_s = split_by_lag(all_data, cfg, n_lags, k)
+    else:
+        raise ValueError(f"Unknown split_strategy '{strategy}'")
+
+    if verbose:
+        print(
+            f"Split ({strategy}): train={len(train_s):,} | "
+            f"val={len(val_s):,} | test={len(test_s):,}"
+        )
+
+    train_file_indices = sorted({int(x) for x in train_s[:, 0]}) if len(train_s) > 0 else []
+    train_data_list = [all_data[i] for i in train_file_indices]
+    if not train_data_list:
+        raise ValueError("Training split is empty. Adjust split configuration before preprocessing.")
+    binner = VolumeBinner(n_bins=int(data_cfg["n_volume_bins"])).fit(train_data_list)
+    binner.save(paths["binner"])
+
+    # Kept for backward compatibility with existing evaluation/checkpoint flows.
+    if normalize_prices and train_file_indices:
+        np.save(paths["price_stats"], build_price_stats(train_file_indices, all_data))
+
+    if verbose:
+        print("Writing processed splits (mmap .npy)...")
+
+    _write_split_memmap(
+        split_name="train",
+        samples=train_s,
+        all_data=all_data,
+        all_labels=all_labels,
+        binner=binner,
+        out_x_path=paths["X_train"],
+        out_y_path=paths["y_train"],
+        n_lags=n_lags,
+        n_levels=n_levels,
+        normalize_prices=normalize_prices,
+        feature_dtype=feature_dtype,
+        chunk_size=chunk,
+        verbose=verbose,
+    )
+    _write_split_memmap(
+        split_name="val",
+        samples=val_s,
+        all_data=all_data,
+        all_labels=all_labels,
+        binner=binner,
+        out_x_path=paths["X_val"],
+        out_y_path=paths["y_val"],
+        n_lags=n_lags,
+        n_levels=n_levels,
+        normalize_prices=normalize_prices,
+        feature_dtype=feature_dtype,
+        chunk_size=chunk,
+        verbose=verbose,
+    )
+    _write_split_memmap(
+        split_name="test",
+        samples=test_s,
+        all_data=all_data,
+        all_labels=all_labels,
+        binner=binner,
+        out_x_path=paths["X_test"],
+        out_y_path=paths["y_test"],
+        n_lags=n_lags,
+        n_levels=n_levels,
+        normalize_prices=normalize_prices,
+        feature_dtype=feature_dtype,
+        chunk_size=chunk,
+        verbose=verbose,
+    )
+
+    meta = {
+        "signature": preprocess_signature(cfg),
+        "raw_files": [f.name for f in raw_files],
+        "counts": {
+            "train": int(len(train_s)),
+            "val": int(len(val_s)),
+            "test": int(len(test_s)),
+        },
+        "n_nodes": int(2 * n_levels * (n_lags + 1)),
+        "n_features": 2,
+        "feature_dtype": str(feature_dtype),
+        "chunk_size": chunk,
+    }
+    with open(paths["meta"], "w", encoding="utf-8") as f:
+        json.dump(meta, f, indent=2, sort_keys=True)
+
+    if verbose:
+        print("Processed dataset ready.")
+    return paths

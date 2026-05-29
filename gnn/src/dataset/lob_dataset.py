@@ -1,5 +1,6 @@
 import numpy as np
 import torch
+from torch.utils.data import Dataset as TorchDataset
 from torch_geometric.data import Data, Dataset
 
 from src.dataset.binning import VolumeBinner
@@ -9,6 +10,104 @@ _ASK_P_COLS = np.arange(0, 40, 4)   # AskPrice: cols 0,4,8,...,36
 _BID_P_COLS = np.arange(2, 40, 4)   # BidPrice: cols 2,6,10,...,38
 _ASK_V_COLS = np.arange(1, 40, 4)   # AskVol:   cols 1,5,9,...,37
 _BID_V_COLS = np.arange(3, 40, 4)   # BidVol:   cols 3,7,11,...,39
+
+
+class FastLOBDataset(Dataset):
+    """Memory-mapped dataset over precomputed LOB graph node features.
+
+    Expected files:
+        X_*.npy: shape [N, 3020, 2] (typically float16 for disk efficiency)
+        y_*.npy: shape [N] int64 labels {0,1,2}
+
+    Runtime behavior:
+      - x is cast to float32 inside get() for stable training math.
+      - edge_index is static and shared by all samples.
+      - no online feature reconstruction is performed.
+    """
+
+    def __init__(self, x_path: str, y_path: str, edge_index: torch.Tensor):
+        super().__init__()
+        self.x_path = x_path
+        self.y_path = y_path
+
+        x = np.load(self.x_path, mmap_mode="r")
+        y = np.load(self.y_path, mmap_mode="r")
+        if len(x) != len(y):
+            raise ValueError(
+                f"Mismatched feature/label lengths: {len(x)} vs {len(y)} "
+                f"({x_path}, {y_path})"
+            )
+        self._len = int(len(y))
+        self.X = None
+        self.y = None
+        self.edge_index = edge_index
+
+    def _ensure_open(self) -> None:
+        # Lazily open memmaps per worker process.
+        if self.X is None or self.y is None:
+            self.X = np.load(self.x_path, mmap_mode="r")
+            self.y = np.load(self.y_path, mmap_mode="r")
+
+    def len(self) -> int:
+        return self._len
+
+    def get(self, idx: int) -> Data:
+        self._ensure_open()
+        # float16->float32 cast allocates once; if already float32 on disk,
+        # copy only when needed to get a writable NumPy buffer for torch.
+        x_np = np.asarray(self.X[idx], dtype=np.float32)
+        if not x_np.flags.writeable:
+            x_np = x_np.copy()
+        x = torch.from_numpy(x_np)
+        y = torch.tensor(int(self.y[idx]), dtype=torch.long)
+        return Data(x=x, edge_index=self.edge_index, y=y)
+
+
+class StaticLOBTensorDataset(TorchDataset):
+    """Memory-mapped tensor dataset for static-graph training mode.
+
+    Returns plain tensors:
+      - x: float32 tensor of shape [N, F]
+      - y: long scalar tensor
+    so a standard torch DataLoader builds batches as:
+      - x_batch: [B, N, F]
+      - y_batch: [B]
+    """
+
+    def __init__(self, x_path: str, y_path: str):
+        self.x_path = x_path
+        self.y_path = y_path
+
+        x = np.load(self.x_path, mmap_mode="r")
+        y = np.load(self.y_path, mmap_mode="r")
+        if len(x) != len(y):
+            raise ValueError(
+                f"Mismatched feature/label lengths: {len(x)} vs {len(y)} "
+                f"({x_path}, {y_path})"
+            )
+        self._len = int(len(y))
+        self.X = None
+        self.y = None
+
+    def _ensure_open(self) -> None:
+        # Lazily open memmaps per worker process.
+        if self.X is None or self.y is None:
+            self.X = np.load(self.x_path, mmap_mode="r")
+            self.y = np.load(self.y_path, mmap_mode="r")
+
+    def __len__(self) -> int:
+        return self._len
+
+    def __getitem__(self, idx: int) -> tuple[torch.Tensor, torch.Tensor]:
+        self._ensure_open()
+        # float16->float32 cast allocates once; if already float32 on disk,
+        # copy only when needed to get a writable NumPy buffer for torch.
+        x_np = np.asarray(self.X[idx], dtype=np.float32)
+        if not x_np.flags.writeable:
+            x_np = x_np.copy()
+        x = torch.from_numpy(x_np)
+        y = torch.tensor(int(self.y[idx]), dtype=torch.long)
+        return x, y
 
 
 class LOBDataset(Dataset):
