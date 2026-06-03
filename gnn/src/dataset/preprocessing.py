@@ -102,6 +102,36 @@ def split_by_lag(
     return _cat(train_parts), _cat(val_parts), _cat(test_parts)
 
 
+def _subsample(samples: np.ndarray, max_n: int | None, seed: int) -> np.ndarray:
+    """Randomly subsample rows, preserving order."""
+    if max_n is None or len(samples) <= max_n:
+        return samples
+    rng = np.random.default_rng(seed)
+    idx = rng.choice(len(samples), size=max_n, replace=False)
+    return samples[np.sort(idx)]
+
+
+def _balance_samples(
+    samples: np.ndarray,
+    all_labels: list[np.ndarray],
+    max_per_class: int | None,
+    seed: int,
+) -> np.ndarray:
+    """Subsample train_s to have equal class representation."""
+    labels = np.array([all_labels[int(fi)][int(t)] for fi, t in samples])
+    counts = np.bincount(labels, minlength=3)
+    n = int(counts.min())
+    if max_per_class is not None:
+        n = min(n, int(max_per_class))
+    rng = np.random.default_rng(seed)
+    chosen = np.concatenate([
+        rng.choice(np.where(labels == c)[0], size=n, replace=False)
+        for c in range(3)
+    ])
+    rng.shuffle(chosen)
+    return samples[chosen]
+
+
 def build_price_stats(train_files: list[int], all_data: list[np.ndarray]) -> dict[str, np.ndarray]:
     """Legacy artifact kept for compatibility with older checkpoints/scripts."""
     data = np.concatenate([all_data[i] for i in train_files], axis=0)
@@ -153,6 +183,12 @@ def preprocess_signature(cfg: dict[str, Any]) -> dict[str, Any]:
         sig["val_ratio"] = float(data_cfg["val_ratio"])
     else:
         raise ValueError(f"Unknown split_strategy '{split}'")
+    mpc = data_cfg.get("max_samples_per_class")
+    sig["max_samples_per_class"] = int(mpc) if mpc is not None else None
+    mvs = data_cfg.get("max_val_samples")
+    sig["max_val_samples"] = int(mvs) if mvs is not None else None
+    mts = data_cfg.get("max_test_samples")
+    sig["max_test_samples"] = int(mts) if mts is not None else None
     return sig
 
 
@@ -361,6 +397,23 @@ def preprocess_to_disk(
             f"Split ({strategy}): train={len(train_s):,} | "
             f"val={len(val_s):,} | test={len(test_s):,}"
         )
+
+    seed = cfg.get("training", {}).get("seed", 42)
+    max_per_class = data_cfg.get("max_samples_per_class")
+    if max_per_class is not None:
+        train_s = _balance_samples(train_s, all_labels, max_per_class, seed)
+        if verbose:
+            print(f"Balanced train: {len(train_s):,} samples ({len(train_s)//3:,}/class, cap={max_per_class:,})")
+    max_val = data_cfg.get("max_val_samples")
+    if max_val is not None:
+        val_s = _subsample(val_s, max_val, seed)
+        if verbose:
+            print(f"Subsampled val:  {len(val_s):,} samples")
+    max_test = data_cfg.get("max_test_samples")
+    if max_test is not None:
+        test_s = _subsample(test_s, max_test, seed)
+        if verbose:
+            print(f"Subsampled test: {len(test_s):,} samples")
 
     train_file_indices = sorted({int(x) for x in train_s[:, 0]}) if len(train_s) > 0 else []
     train_data_list = [all_data[i] for i in train_file_indices]

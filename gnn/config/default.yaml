@@ -23,6 +23,9 @@ data:
   val_ratio: 0.15
 
   normalize_prices: true
+  max_samples_per_class: 70000   # null → nessun cap; numero → bilancia train a N sample/classe
+  max_val_samples: 30000         # null → usa tutto; subsample casuale per val veloce
+  max_test_samples: null         # null → usa tutto per la valutazione finale
 
 model:
   type: gcn             # 'gcn', 'gat', 'sage'  ← gcn è 3-5x più veloce di gat
@@ -39,8 +42,7 @@ training:
   weight_decay: 1.0e-4
   early_stopping_patience: 15
   grad_clip: 1.0
-  use_class_weights: false  # sostituito da balanced sampler
-  max_samples_per_class: 100000  # null → usa il minimo tra le classi; aumenta se hai abbastanza dati
+  use_class_weights: false  # sostituito da balanced sampling in preprocessing
   num_workers: 8        # parallelizza il data loading su CPU
   seed: 42
 
