@@ -35,10 +35,10 @@ model:
   num_heads: 2          # GAT only
 
 training:
-  epochs: 3
+  epochs: 10
   batch_size: 256
   static_graph_batching: true  # true: GCN-only static tensor path
-  lr: 6.0e-5
+  lr: 3.0e-4
   weight_decay: 1.0e-4
   early_stopping_patience: 15
   grad_clip: 1.0
