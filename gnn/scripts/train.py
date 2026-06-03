@@ -178,10 +178,11 @@ def main(config_path: str) -> None:
         print(f"  Class weights: {class_weights.cpu().numpy().round(3)}")
 
     criterion = torch.nn.CrossEntropyLoss(weight=class_weights)
-    optimizer = torch.optim.Adam(
+    optimizer = torch.optim.AdamW(
         model.parameters(),
         lr=cfg["training"]["lr"],
         weight_decay=cfg["training"]["weight_decay"],
+        betas=(0.90, 0.95),
     )
     scheduler = ReduceLROnPlateau(
         optimizer,
