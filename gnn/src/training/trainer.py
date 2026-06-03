@@ -5,7 +5,7 @@ from pathlib import Path
 import numpy as np
 import torch
 import torch.nn as nn
-from sklearn.metrics import f1_score
+from sklearn.metrics import confusion_matrix, f1_score
 from tqdm import tqdm
 
 
@@ -53,7 +53,7 @@ class Trainer:
         epoch_bar = tqdm(range(1, epochs + 1), desc="Training", unit="ep")
         for epoch in epoch_bar:
             tr_loss, tr_acc = self._train_epoch(train_loader)
-            va_loss, va_acc, va_f1 = self._eval_epoch(val_loader)
+            va_loss, va_acc, va_f1, va_cm = self._eval_epoch(val_loader)
             self.scheduler.step(va_loss)
 
             history["train_loss"].append(tr_loss)
@@ -79,6 +79,12 @@ class Trainer:
                 f"Ep {epoch:03d} | "
                 f"train {tr_loss:.4f}/{tr_acc:.3f} | "
                 f"val {va_loss:.4f}/acc={va_acc:.3f}/f1={va_f1:.3f}{tag}"
+            )
+            tqdm.write(
+                f"  CM        pred_down  pred_flat   pred_up\n"
+                f"  true_down {va_cm[0,0]:>9,} {va_cm[0,1]:>9,} {va_cm[0,2]:>9,}\n"
+                f"  true_flat {va_cm[1,0]:>9,} {va_cm[1,1]:>9,} {va_cm[1,2]:>9,}\n"
+                f"  true_up   {va_cm[2,0]:>9,} {va_cm[2,1]:>9,} {va_cm[2,2]:>9,}"
             )
 
             if patience_cnt >= self.patience:
@@ -142,7 +148,8 @@ class Trainer:
         avg_loss = total_loss / len(labels)
         acc = (preds == labels).mean()
         f1  = f1_score(labels, preds, average="macro", zero_division=0)
-        return avg_loss, acc, f1
+        cm  = confusion_matrix(labels, preds, labels=[0, 1, 2])
+        return avg_loss, acc, f1, cm
 
     @torch.no_grad()
     def predict(self, loader) -> tuple[np.ndarray, np.ndarray]:
