@@ -85,6 +85,38 @@ def make_collate_fn(edge_index: torch.Tensor, batch_size: int, num_nodes: int):
     return _collate
 
 
+class BalancedSampler(torch.utils.data.Sampler):
+    """Samples exactly n_per_class indices from each class per epoch.
+
+    n_per_class = min(min_class_count, max_per_class).
+    If max_per_class is None, uses the smallest class count (no upsampling).
+    """
+
+    def __init__(self, y_path: str | Path, max_per_class: int | None, seed: int):
+        labels = np.load(y_path, mmap_mode="r")
+        counts = np.bincount(labels, minlength=3)
+        n = int(counts.min())
+        if max_per_class is not None:
+            n = min(n, int(max_per_class))
+        self.n_per_class = n
+        self.class_indices = [np.where(labels == c)[0] for c in range(3)]
+        self.seed = seed
+        self._epoch = 0
+
+    def __iter__(self):
+        rng = np.random.default_rng(self.seed + self._epoch)
+        self._epoch += 1
+        chosen = np.concatenate([
+            rng.choice(idx, size=self.n_per_class, replace=False)
+            for idx in self.class_indices
+        ])
+        rng.shuffle(chosen)
+        return iter(chosen.tolist())
+
+    def __len__(self) -> int:
+        return self.n_per_class * 3
+
+
 def build_class_weights_from_y(y_path: str | Path, device: torch.device) -> torch.Tensor:
     y = np.load(y_path, mmap_mode="r")
     counts = np.bincount(y, minlength=3)
@@ -151,8 +183,14 @@ def main(config_path: str) -> None:
         persistent_workers=cfg["training"].get("num_workers", 0) > 0,
         pin_memory=(device.type == "cuda"),
     )
+    max_per_class = cfg["training"].get("max_samples_per_class")
+    train_sampler = BalancedSampler(paths["y_train"], max_per_class, cfg["training"]["seed"])
+    print(f"  Balanced sampler: {train_sampler.n_per_class:,} samples/class "
+          f"→ {len(train_sampler):,} total/epoch"
+          + (f" (cap: {max_per_class:,})" if max_per_class else " (min-class cap)"))
+
     if use_static_mode:
-        train_loader = DataLoader(train_ds, shuffle=True, drop_last=True, **loader_kw_base)
+        train_loader = DataLoader(train_ds, sampler=train_sampler, drop_last=True, **loader_kw_base)
         val_loader = DataLoader(val_ds, shuffle=False, drop_last=False, **loader_kw_base)
         test_loader = DataLoader(test_ds, shuffle=False, drop_last=False, **loader_kw_base)
     else:
@@ -162,7 +200,7 @@ def main(config_path: str) -> None:
         collate_fn = make_collate_fn(edge_index, cfg["training"]["batch_size"], num_nodes)
         loader_kw = dict(loader_kw_base)
         loader_kw["collate_fn"] = collate_fn
-        train_loader = DataLoader(train_ds, shuffle=True, drop_last=True, **loader_kw)
+        train_loader = DataLoader(train_ds, sampler=train_sampler, drop_last=True, **loader_kw)
         val_loader = DataLoader(val_ds, shuffle=False, drop_last=False, **loader_kw)
         test_loader = DataLoader(test_ds, shuffle=False, drop_last=False, **loader_kw)
 
