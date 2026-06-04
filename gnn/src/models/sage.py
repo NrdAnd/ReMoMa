@@ -30,7 +30,7 @@ class GraphSAGE(GNNClassifier):
             SAGEConv(dims[i], dims[i + 1]) for i in range(num_layers)
         )
         self.norms = nn.ModuleList(
-            nn.BatchNorm1d(hidden_channels) for _ in range(num_layers)
+            nn.LayerNorm(hidden_channels) for _ in range(num_layers)
         )
         self.head = nn.Sequential(
             nn.Linear(hidden_channels, hidden_channels // 2),

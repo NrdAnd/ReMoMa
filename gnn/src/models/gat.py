@@ -32,20 +32,20 @@ class GAT(GNNClassifier):
 
         if num_layers == 1:
             self.convs.append(GATConv(hidden_channels, hidden_channels, heads=1, dropout=dropout, concat=False))
-            self.norms.append(nn.BatchNorm1d(hidden_channels))
+            self.norms.append(nn.LayerNorm(hidden_channels))
         else:
             # First layer: hidden → hidden * heads
             self.convs.append(GATConv(hidden_channels, hidden_channels, heads=num_heads, dropout=dropout, concat=True))
-            self.norms.append(nn.BatchNorm1d(hidden_channels * num_heads))
+            self.norms.append(nn.LayerNorm(hidden_channels * num_heads))
 
             # Intermediate layers: hidden*heads → hidden*heads
             for _ in range(num_layers - 2):
                 self.convs.append(GATConv(hidden_channels * num_heads, hidden_channels, heads=num_heads, dropout=dropout, concat=True))
-                self.norms.append(nn.BatchNorm1d(hidden_channels * num_heads))
+                self.norms.append(nn.LayerNorm(hidden_channels * num_heads))
 
             # Last layer: hidden*heads → hidden (single head, average)
             self.convs.append(GATConv(hidden_channels * num_heads, hidden_channels, heads=1, dropout=dropout, concat=False))
-            self.norms.append(nn.BatchNorm1d(hidden_channels))
+            self.norms.append(nn.LayerNorm(hidden_channels))
 
         self.head = nn.Sequential(
             nn.Linear(hidden_channels, hidden_channels // 2),

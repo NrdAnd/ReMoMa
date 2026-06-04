@@ -30,7 +30,7 @@ class GCN(GNNClassifier):
             GCNConv(dims[i], dims[i + 1]) for i in range(num_layers)
         )
         self.norms = nn.ModuleList(
-            nn.BatchNorm1d(hidden_channels) for _ in range(num_layers)
+            nn.LayerNorm(hidden_channels) for _ in range(num_layers)
         )
         self.head = nn.Sequential(
             nn.Linear(hidden_channels, hidden_channels // 2),
@@ -68,8 +68,9 @@ class GCN(GNNClassifier):
         for conv, norm in zip(self.convs, self.norms):
             # GCNConv supports static mode with x shaped [B, N, H].
             x = conv(x, edge_index)  # [B, N, H]
-            # BatchNorm1d expects channel dim in position 1 for 3D input.
-            x = norm(x.transpose(1, 2)).transpose(1, 2)
+            # LayerNorm normalizes the last (feature) dim → no transpose, and
+            # identical behavior in train/eval (no running stats).
+            x = norm(x)
             x = F.relu(x)
             x = F.dropout(x, p=self.dropout, training=self.training)
 
