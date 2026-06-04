@@ -20,3 +20,4 @@ gnn/checkpoints/
 
 # Notebooks
 .ipynb_checkpoints/
+gnn/scripts/lr_finder.py
