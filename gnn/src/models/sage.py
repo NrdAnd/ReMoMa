@@ -15,12 +15,16 @@ class GraphSAGE(GNNClassifier):
         num_layers: int = 3,
         num_classes: int = 3,
         dropout: float = 0.3,
+        num_nodes: int | None = None,
+        n_lags: int = 150,
+        add_lag_feature: bool = False,
         **_kwargs,
     ):
         super().__init__()
         self.dropout = dropout
 
-        self.node_encoder = nn.Linear(in_channels, hidden_channels)
+        self._init_pos_features(num_nodes, n_lags, add_lag_feature)
+        self.node_encoder = nn.Linear(in_channels + self.n_extra, hidden_channels)
         dims = [hidden_channels] * (num_layers + 1)
         self.convs = nn.ModuleList(
             SAGEConv(dims[i], dims[i + 1]) for i in range(num_layers)
@@ -38,6 +42,7 @@ class GraphSAGE(GNNClassifier):
     def forward(self, data: Data) -> Tensor:
         x, edge_index, batch = data.x, data.edge_index, data.batch
 
+        x = self._cat_pos_flat(x)
         x = F.relu(self.node_encoder(x))
         for conv, norm in zip(self.convs, self.norms):
             x = conv(x, edge_index)

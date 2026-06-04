@@ -3,7 +3,7 @@ data:
   adj_matrix_path: ../tmfg/cisco_tmfg_adj_matrix_2000_bins.csv
   processed_dir: data/processed
   use_precomputed: true      # train/eval read mmap tensors from processed_dir
-  force_preprocess: true     # RIMETTI false dopo il primo rebuild (fix binner NaN)
+  force_preprocess: false    # true -> rigenera i tensori anche se la cache combacia
   preprocess_chunk_size: 2048
   feature_dtype: float16     # disk dtype for X_*.npy (runtime cast to float32)
   n_lags: 150          # lags from 0 to 150 → 151 time steps per node
@@ -25,7 +25,7 @@ data:
   normalize_prices: true
   max_samples_per_class: 50000   # null → nessun cap; numero → bilancia train a N sample/classe
   max_val_samples: 25000         # null → usa tutto; subsample casuale per val veloce
-  max_test_samples: null         # null → usa tutto per la valutazione finale
+  max_test_samples: 50000         # null → usa tutto per la valutazione finale
 
 model:
   type: gcn             # 'gcn', 'gat', 'sage'  ← gcn è 3-5x più veloce di gat
@@ -33,9 +33,10 @@ model:
   num_layers: 3
   dropout: 0.3
   num_heads: 2          # GAT only
+  add_lag_feature: true # aggiunge una 3ª feature per nodo = lag normalizzato [0,1]
 
 training:
-  epochs: 15
+  epochs: 40
   batch_size: 256
   static_graph_batching: true  # true: GCN-only static tensor path
   lr: 2.0e-4
