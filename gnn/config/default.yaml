@@ -38,9 +38,11 @@ training:
   epochs: 10
   batch_size: 256
   static_graph_batching: true  # true: GCN-only static tensor path
-  lr: 3.0e-4
+  lr: 2.0e-4
   weight_decay: 1.0e-4
   early_stopping_patience: 15
+  lr_scheduler_patience: 3   # epoch di val-loss non in calo prima di tagliare il LR
+  lr_scheduler_factor: 0.5   # fattore di riduzione del LR (0.5 = dimezza)
   grad_clip: 1.0
   use_class_weights: false  # sostituito da balanced sampling in preprocessing
   num_workers: 8        # parallelizza il data loading su CPU

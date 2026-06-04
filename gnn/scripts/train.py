@@ -187,8 +187,8 @@ def main(config_path: str) -> None:
     scheduler = ReduceLROnPlateau(
         optimizer,
         mode="min",
-        patience=cfg["training"]["early_stopping_patience"] // 2,
-        factor=0.5,
+        patience=cfg["training"].get("lr_scheduler_patience", 3),
+        factor=cfg["training"].get("lr_scheduler_factor", 0.5),
     )
 
     ckpt_dir = Path(cfg["paths"]["checkpoints"])
