@@ -2,6 +2,10 @@ data:
   raw_dir: ../lobster_cisco
   adj_matrix_path: ../tmfg/tmfg_adj_matrix_250_bins.csv
   processed_dir: data/processed
+  use_precomputed: true
+  force_preprocess: false
+  preprocess_chunk_size: 1024
+  feature_dtype: float16
   n_lags: 150
   n_levels: 10
   n_volume_bins: 2000
@@ -13,10 +17,8 @@ data:
   train_files: [0]          # ignorato da by_lag, ma richiesto da evaluate.py
   val_files: [0]
   test_files: [0]
-  train_ratio: 0.005        # ~0.5% del file → poche migliaia di sample
-  val_ratio: 0.002
-  # il resto (~99.3%) va in test; con predict bar ora è visibile ma lento →
-  # per un test rapido puoi killare dopo aver visto le metriche di train/val
+  train_ratio: 0.70       
+  val_ratio: 0.15
 
   normalize_prices: true
 
@@ -30,6 +32,7 @@ model:
 training:
   epochs: 3
   batch_size: 256
+  static_graph_batching: false
   lr: 1.0e-3
   weight_decay: 1.0e-4
   early_stopping_patience: 3

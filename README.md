@@ -33,6 +33,7 @@ The repository is divided into sequential modules that reflect the data processi
   2. **Down** (Decrease)
   3. **Flat** (Stationary)
 - The adjacency matrices (from GLASSO/TMFG) will guide the neural network's *message passing*, allowing the model to capture not just the current state of the LOB, but the complex structural relationships between its levels.
+- **Implementation details:** see `gnn/README.md` for the current memory-mapped preprocessing + training workflow.
 
 ---
 

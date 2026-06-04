@@ -33,8 +33,19 @@ class VolumeBinner:
         all_vol_cols = np.concatenate([_ASK_VOL_COLS, _BID_VOL_COLS])
         all_vols = all_data[:, all_vol_cols].astype(np.float64).ravel()
 
+        # Drop NaN/inf: a single non-finite value poisons np.percentile and
+        # collapses the edges to [nan], silently zeroing the whole feature.
+        all_vols = all_vols[np.isfinite(all_vols)]
+        if all_vols.size == 0:
+            raise ValueError("No finite volume values to fit VolumeBinner.")
+
         percentiles = np.linspace(0, 100, self.n_bins + 1)
         self._edges = np.unique(np.percentile(all_vols, percentiles))
+        if len(self._edges) < 2:
+            raise ValueError(
+                f"VolumeBinner produced {len(self._edges)} edge(s); volume data "
+                "is constant or degenerate. Check the raw input."
+            )
         return self
 
     def transform_window(
@@ -57,7 +68,11 @@ class VolumeBinner:
         )
 
     def _discretize(self, values: np.ndarray) -> np.ndarray:
+        if self._edges is None:
+            raise RuntimeError("VolumeBinner is not fitted. Call fit() or load() before transform.")
         n_bins = max(len(self._edges) - 1, 1)
+        # Map non-finite volumes to 0 (lowest bin) so searchsorted stays valid.
+        values = np.nan_to_num(values, nan=0.0, posinf=0.0, neginf=0.0)
         idx = np.searchsorted(self._edges[1:-1], values, side="right").astype(np.float32)
         return idx / n_bins
 
