@@ -3,7 +3,7 @@ data:
   adj_matrix_path: ../tmfg/cisco_tmfg_adj_matrix_2000_bins.csv
   processed_dir: data/processed
   use_precomputed: true      # train/eval read mmap tensors from processed_dir
-  force_preprocess: false    # true -> rigenera i tensori anche se la cache combacia
+  force_preprocess: true    # true -> rigenera i tensori anche se la cache combacia
   preprocess_chunk_size: 2048
   feature_dtype: float16     # disk dtype for X_*.npy (runtime cast to float32)
   n_lags: 150          # lags from 0 to 150 → 151 time steps per node
@@ -36,12 +36,12 @@ model:
   add_lag_feature: true # aggiunge una 3ª feature per nodo = lag normalizzato [0,1]
 
 training:
-  epochs: 40
-  batch_size: 256
+  epochs: 50
+  batch_size: 128
   static_graph_batching: true  # true: GCN-only static tensor path
-  lr: 2.0e-4
+  lr: 3.0e-4
   weight_decay: 1.0e-4
-  early_stopping_patience: 15
+  early_stopping_patience: 8
   lr_scheduler_patience: 3   # epoch di val-loss non in calo prima di tagliare il LR
   lr_scheduler_factor: 0.5   # fattore di riduzione del LR (0.5 = dimezza)
   grad_clip: 1.0

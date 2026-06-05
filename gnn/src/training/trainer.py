@@ -50,6 +50,11 @@ class Trainer:
         best_val_f1 = 0.0
         patience_cnt = 0
 
+        # Per-epoch metrics log (open in Excel/Sheets, plot the F1 curve)
+        csv_path = self.checkpoint_dir / "metrics.csv"
+        csv_file = open(csv_path, "w", encoding="utf-8")
+        csv_file.write("epoch,train_loss,train_acc,val_loss,val_acc,val_f1,is_best\n")
+
         epoch_bar = tqdm(range(1, epochs + 1), desc="Training", unit="ep")
         for epoch in epoch_bar:
             tr_loss, tr_acc = self._train_epoch(train_loader)
@@ -71,6 +76,12 @@ class Trainer:
                 patience_cnt += 1
                 tag = ""
 
+            csv_file.write(
+                f"{epoch},{tr_loss:.6f},{tr_acc:.6f},"
+                f"{va_loss:.6f},{va_acc:.6f},{va_f1:.6f},{int(bool(tag))}\n"
+            )
+            csv_file.flush()
+
             epoch_bar.set_postfix(
                 tr_loss=f"{tr_loss:.4f}", tr_acc=f"{tr_acc:.3f}",
                 va_loss=f"{va_loss:.4f}", va_f1=f"{va_f1:.3f}",
@@ -91,6 +102,8 @@ class Trainer:
                 tqdm.write(f"Early stopping at epoch {epoch}.")
                 break
 
+        csv_file.close()
+        tqdm.write(f"Metrics saved to {csv_path}")
         return history
 
     def _forward_batch(self, batch):
