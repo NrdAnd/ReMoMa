@@ -28,12 +28,20 @@ data:
   max_test_samples: 50000         # null → usa tutto per la valutazione finale
 
 model:
-  type: gcn             # 'gcn', 'gat', 'sage'  ← gcn è 3-5x più veloce di gat
-  hidden_channels: 225
+  type: gcn             # 'gcn', 'gat', 'sage' — scegli con --model, i parametri sotto si autoadattano
+  hidden_channels: 225  # default (gcn)
   num_layers: 3
   dropout: 0.3
   num_heads: 2          # GAT only
   add_lag_feature: true # aggiunge una 3ª feature per nodo = lag normalizzato [0,1]
+  # preset per architettura: sovrascrivono i valori sopra in base al tipo scelto
+  # (es. SAGE ha ~2x parametri/layer → hidden più basso per restare a ~180-200k)
+  overrides:
+    sage:
+      hidden_channels: 160
+    gat:
+      hidden_channels: 160
+      num_heads: 2
 
 training:
   epochs: 50

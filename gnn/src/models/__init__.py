@@ -7,7 +7,8 @@ _REGISTRY = {"gcn": GCN, "gat": GAT, "sage": GraphSAGE}
 
 
 def build_model(cfg: dict) -> GNNClassifier:
-    model_type = cfg["model"]["type"].lower()
+    model_cfg = cfg["model"]
+    model_type = model_cfg["type"].lower()
     if model_type not in _REGISTRY:
         raise ValueError(f"Unknown model type '{model_type}'. Choose from {list(_REGISTRY)}")
 
@@ -16,15 +17,23 @@ def build_model(cfg: dict) -> GNNClassifier:
     n_levels = int(data_cfg.get("n_levels", 10))
     num_nodes = 2 * n_levels * (n_lags + 1)
 
+    # Per-architecture presets under model.overrides.<type> take precedence
+    # over the shared model.<param> values. So choosing the architecture
+    # automatically selects its tuned hyper-parameters.
+    ov = (model_cfg.get("overrides") or {}).get(model_type, {}) or {}
+
+    def pick(key, default=None):
+        return ov.get(key, model_cfg.get(key, default))
+
     params = {
         "in_channels":     2,
-        "hidden_channels": cfg["model"]["hidden_channels"],
-        "num_layers":      cfg["model"]["num_layers"],
+        "hidden_channels": pick("hidden_channels"),
+        "num_layers":      pick("num_layers"),
         "num_classes":     3,
-        "dropout":         cfg["model"]["dropout"],
-        "num_heads":       cfg["model"].get("num_heads", 4),
+        "dropout":         pick("dropout"),
+        "num_heads":       pick("num_heads", 4),
         "num_nodes":       num_nodes,
         "n_lags":          n_lags,
-        "add_lag_feature": cfg["model"].get("add_lag_feature", False),
+        "add_lag_feature": model_cfg.get("add_lag_feature", False),
     }
     return _REGISTRY[model_type](**params)

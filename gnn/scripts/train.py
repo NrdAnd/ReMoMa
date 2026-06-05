@@ -94,9 +94,25 @@ def build_class_weights_from_y(y_path: str | Path, device: torch.device) -> torc
     return torch.tensor(weights, dtype=torch.float32, device=device)
 
 
-def main(config_path: str) -> None:
+def main(config_path: str, overrides: dict | None = None) -> None:
     with open(config_path) as f:
         cfg = yaml.safe_load(f)
+
+    # CLI overrides (so you can switch architecture without editing the yaml)
+    overrides = overrides or {}
+    if overrides.get("model") is not None:
+        cfg["model"]["type"] = overrides["model"]
+    if overrides.get("hidden") is not None:
+        # write into the selected arch's preset so it wins over the default
+        mt = cfg["model"]["type"].lower()
+        cfg["model"].setdefault("overrides", {}).setdefault(mt, {})["hidden_channels"] = overrides["hidden"]
+    if overrides.get("lr") is not None:
+        cfg["training"]["lr"] = float(overrides["lr"])
+    if overrides.get("epochs") is not None:
+        cfg["training"]["epochs"] = int(overrides["epochs"])
+    applied = {k: v for k, v in overrides.items() if v is not None and k != "config"}
+    if applied:
+        print(f"CLI overrides: {applied}\n")
 
     set_seed(cfg["training"]["seed"])
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -226,5 +242,13 @@ def main(config_path: str) -> None:
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", default="config/default.yaml")
+    parser.add_argument("--model", choices=["gcn", "gat", "sage"], default=None,
+                        help="override model.type (es. sage)")
+    parser.add_argument("--hidden", type=int, default=None,
+                        help="override model.hidden_channels (es. 160 per SAGE)")
+    parser.add_argument("--lr", type=float, default=None,
+                        help="override training.lr")
+    parser.add_argument("--epochs", type=int, default=None,
+                        help="override training.epochs")
     args = parser.parse_args()
-    main(args.config)
+    main(args.config, vars(args))

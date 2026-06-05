@@ -1,8 +1,9 @@
+import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch import Tensor
 from torch_geometric.data import Data
-from torch_geometric.nn import SAGEConv, global_mean_pool
+from torch_geometric.nn import SAGEConv, global_max_pool, global_mean_pool
 
 from src.models.base import GNNClassifier
 
@@ -32,8 +33,9 @@ class GraphSAGE(GNNClassifier):
         self.norms = nn.ModuleList(
             nn.LayerNorm(hidden_channels) for _ in range(num_layers)
         )
+        # head input = concat[mean pool, max pool] → 2 * hidden_channels
         self.head = nn.Sequential(
-            nn.Linear(hidden_channels, hidden_channels // 2),
+            nn.Linear(2 * hidden_channels, hidden_channels // 2),
             nn.ReLU(),
             nn.Dropout(dropout),
             nn.Linear(hidden_channels // 2, num_classes),
@@ -50,4 +52,7 @@ class GraphSAGE(GNNClassifier):
             x = F.relu(x)
             x = F.dropout(x, p=self.dropout, training=self.training)
 
-        return self.head(global_mean_pool(x, batch))
+        pooled = torch.cat(
+            [global_mean_pool(x, batch), global_max_pool(x, batch)], dim=1
+        )
+        return self.head(pooled)
