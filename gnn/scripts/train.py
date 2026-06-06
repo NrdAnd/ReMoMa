@@ -144,7 +144,7 @@ def main(config_path: str, overrides: dict | None = None) -> None:
 
     static_graph_batching = bool(cfg["training"].get("static_graph_batching", False))
     model_type = cfg["model"]["type"].lower()
-    use_static_mode = static_graph_batching and model_type == "gcn"
+    use_static_mode = static_graph_batching and model_type in ("gcn", "cgnn")
     if static_graph_batching and not use_static_mode:
         print(
             f"[warn] static_graph_batching requested, but model.type='{model_type}' "
@@ -242,8 +242,8 @@ def main(config_path: str, overrides: dict | None = None) -> None:
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", default="config/default.yaml")
-    parser.add_argument("--model", choices=["gcn", "gat", "sage"], default=None,
-                        help="override model.type (es. sage)")
+    parser.add_argument("--model", choices=["gcn", "gat", "sage", "cgnn"], default=None,
+                        help="override model.type (es. cgnn)")
     parser.add_argument("--hidden", type=int, default=None,
                         help="override model.hidden_channels (es. 160 per SAGE)")
     parser.add_argument("--lr", type=float, default=None,

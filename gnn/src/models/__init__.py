@@ -2,8 +2,9 @@ from src.models.base import GNNClassifier
 from src.models.gcn import GCN
 from src.models.gat import GAT
 from src.models.sage import GraphSAGE
+from src.models.cgnn import CGNN
 
-_REGISTRY = {"gcn": GCN, "gat": GAT, "sage": GraphSAGE}
+_REGISTRY = {"gcn": GCN, "gat": GAT, "sage": GraphSAGE, "cgnn": CGNN}
 
 
 def build_model(cfg: dict) -> GNNClassifier:
@@ -34,6 +35,9 @@ def build_model(cfg: dict) -> GNNClassifier:
         "num_heads":       pick("num_heads", 4),
         "num_nodes":       num_nodes,
         "n_lags":          n_lags,
+        "n_levels":        n_levels,
         "add_lag_feature": model_cfg.get("add_lag_feature", False),
+        "cnn_channels":    pick("cnn_channels", 64),
+        "cnn_kernel":      pick("cnn_kernel", 5),
     }
     return _REGISTRY[model_type](**params)

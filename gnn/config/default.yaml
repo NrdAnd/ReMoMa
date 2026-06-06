@@ -42,6 +42,10 @@ model:
     gat:
       hidden_channels: 160
       num_heads: 2
+    cgnn:                   # CNN temporale (sui lag) + GNN spaziale (sul grafo)
+      hidden_channels: 175  # ~181k parametri (confrontabile con gli altri modelli)
+      cnn_channels: 64
+      cnn_kernel: 5
 
 training:
   epochs: 50
