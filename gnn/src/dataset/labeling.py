@@ -25,21 +25,25 @@ def compute_labels(
     threshold: float,
     k: int = 1,
     price_type: str = "mid",
+    label_mode: str = "pct",
 ) -> np.ndarray:
     """Compute direction labels over a k-step horizon.
 
     Label[t] encodes the direction of the reference price from tick t to t+k:
-        0  →  down  (pct_change < -threshold)
-        1  →  flat  (|pct_change| <= threshold)
-        2  →  up    (pct_change >  threshold)
+        0  →  down   (score <= -threshold)
+        1  →  flat   (-threshold < score < threshold)
+        2  →  up     (score >=  threshold)
 
     Args:
         data:       [N, 40] LOBSTER snapshot array.
-        threshold:  Fractional threshold for flat (e.g. 1e-4).
-                    Use 0 with price_type='micro' for balanced classes.
+        threshold:  Threshold for the flat band. Its meaning depends on label_mode.
         k:          Prediction horizon in ticks (default 1).
-        price_type: 'mid'   → (AskPrice_L1 + BidPrice_L1) / 2
-                    'micro' → volume-weighted mid-price (order imbalance aware)
+        price_type: 'mid' or 'micro'.
+        label_mode: 'pct' → score = (price[t+k]-price[t]) / price[t]   (relative)
+                          → threshold is a fraction, e.g. 1e-4
+                    'abs' → score = price[t+k]-price[t]                 (absolute, price units)
+                          → threshold is in price units, e.g. 0.01 = one tick.
+                            More robust: a full-tick move, not any half-tick wiggle.
 
     Returns:
         np.ndarray of shape [N-k], dtype int64.
@@ -48,9 +52,16 @@ def compute_labels(
         raise ValueError(f"price_type must be 'mid' or 'micro', got '{price_type}'")
 
     price = _PRICE_FN[price_type](data)
-    pct = (price[k:] - price[:-k]) / (price[:-k] + 1e-10)
+    diff = price[k:] - price[:-k]
 
-    labels = np.ones(len(pct), dtype=np.int64)
-    labels[pct >  threshold] = 2
-    labels[pct < -threshold] = 0
+    if label_mode == "pct":
+        score = diff / (price[:-k] + 1e-10)
+    elif label_mode == "abs":
+        score = diff
+    else:
+        raise ValueError(f"label_mode must be 'pct' or 'abs', got '{label_mode}'")
+
+    labels = np.ones(len(score), dtype=np.int64)
+    labels[score >=  threshold] = 2
+    labels[score <= -threshold] = 0
     return labels

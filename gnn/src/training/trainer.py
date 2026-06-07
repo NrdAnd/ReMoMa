@@ -176,6 +176,19 @@ class Trainer:
 
         return np.array(all_preds), np.array(all_labels)
 
+    @torch.no_grad()
+    def predict_proba(self, loader) -> tuple[np.ndarray, np.ndarray]:
+        """Like predict() but returns softmax class probabilities [N, C]."""
+        self.model.eval()
+        all_probs, all_labels = [], []
+
+        for batch in tqdm(loader, desc="  predict", leave=False, unit="batch"):
+            out, y, _ = self._forward_batch(batch)
+            all_probs.append(torch.softmax(out, dim=1).cpu().numpy())
+            all_labels.extend(y.cpu().numpy())
+
+        return np.concatenate(all_probs), np.array(all_labels)
+
     def load_best(self) -> None:
         self.model.load_state_dict(
             torch.load(self.checkpoint_dir / "best.pt", map_location=self.device)

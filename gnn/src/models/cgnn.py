@@ -6,6 +6,7 @@ from torch_geometric.data import Data
 from torch_geometric.nn import GCNConv, global_max_pool, global_mean_pool
 
 from src.models.base import GNNClassifier
+from src.models.bin import BiN
 
 
 class CGNN(GNNClassifier):
@@ -40,6 +41,7 @@ class CGNN(GNNClassifier):
         add_lag_feature: bool = False,
         cnn_channels: int = 64,
         cnn_kernel: int = 5,
+        use_bin: bool = False,
         **_kwargs,
     ):
         super().__init__()
@@ -49,6 +51,9 @@ class CGNN(GNNClassifier):
         self.lag_len = n_lags + 1          # 151 steps per (side, level)
         self.n_groups = 2 * n_levels       # 20 = 2 sides × 10 levels
         self.num_nodes = num_nodes if num_nodes is not None else self.n_groups * self.lag_len
+
+        # Learned bilinear input normalization (over raw price/volume channels)
+        self.bin = BiN(self.n_groups, self.lag_len, in_channels) if use_bin else None
 
         self._init_pos_features(num_nodes, n_lags, add_lag_feature)
         feat_in = in_channels + self.n_extra
@@ -95,6 +100,8 @@ class CGNN(GNNClassifier):
 
     def forward_static(self, x_batch: Tensor, edge_index: Tensor) -> Tensor:
         """Static-graph path: x_batch [B, N, Fin]."""
+        if self.bin is not None:
+            x_batch = self.bin(x_batch)
         x = self._cat_pos_static(x_batch)
         x = self._temporal(x)                          # [B, N, H]
         x = self._gnn(x, edge_index)                   # [B, N, H]
@@ -104,6 +111,9 @@ class CGNN(GNNClassifier):
     def forward(self, data: Data) -> Tensor:
         """PyG path: data.x [B*N, Fin]."""
         x, edge_index, batch = data.x, data.edge_index, data.batch
+        if self.bin is not None:
+            b = x.size(0) // self.num_nodes
+            x = self.bin(x.view(b, self.num_nodes, -1)).reshape(x.size(0), -1)
         x = self._cat_pos_flat(x)
         b = x.size(0) // self.num_nodes
         x = self._temporal(x.view(b, self.num_nodes, -1))    # [B, N, H]

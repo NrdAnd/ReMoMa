@@ -170,6 +170,7 @@ def preprocess_signature(cfg: dict[str, Any]) -> dict[str, Any]:
         "prediction_horizon": int(data_cfg.get("prediction_horizon", 1)),
         "threshold": float(data_cfg["threshold"]),
         "price_type": str(data_cfg.get("price_type", "mid")),
+        "label_mode": str(data_cfg.get("label_mode", "pct")),
         "split_strategy": split,
         "normalize_prices": bool(data_cfg.get("normalize_prices", True)),
         "feature_dtype": str(data_cfg.get("feature_dtype", "float16")),
@@ -382,7 +383,8 @@ def preprocess_to_disk(
 
     if verbose:
         print("Computing labels...")
-    all_labels = [compute_labels(d, threshold, k, price_type) for d in all_data]
+    label_mode = str(data_cfg.get("label_mode", "pct"))
+    all_labels = [compute_labels(d, threshold, k, price_type, label_mode) for d in all_data]
 
     strategy = data_cfg["split_strategy"]
     if strategy == "by_file":

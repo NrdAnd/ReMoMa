@@ -144,7 +144,7 @@ def main(config_path: str, overrides: dict | None = None) -> None:
 
     static_graph_batching = bool(cfg["training"].get("static_graph_batching", False))
     model_type = cfg["model"]["type"].lower()
-    use_static_mode = static_graph_batching and model_type in ("gcn", "cgnn")
+    use_static_mode = static_graph_batching and model_type in ("gcn", "cgnn", "stgcn")
     if static_graph_batching and not use_static_mode:
         print(
             f"[warn] static_graph_batching requested, but model.type='{model_type}' "
@@ -228,22 +228,42 @@ def main(config_path: str, overrides: dict | None = None) -> None:
     # ── Test evaluation ────────────────────────────────────────
     print("\n[5/5] Evaluating best checkpoint on test split...")
     trainer.load_best()
-    preds, labels = trainer.predict(test_loader)
-    metrics = compute_metrics(preds, labels)
 
-    print("\n── Test Results ─────────────────────────────────────")
-    print(f"  Accuracy:    {metrics['accuracy']:.4f}")
-    print(f"  F1 Macro:    {metrics['f1_macro']:.4f}")
-    print(f"  F1 Weighted: {metrics['f1_weighted']:.4f}")
-    print()
-    print_report(preds, labels)
+    if cfg["training"].get("tune_threshold", False):
+        from src.training.threshold import apply_thresholds, tune_thresholds
+
+        val_probs, val_labels = trainer.predict_proba(val_loader)
+        test_probs, test_labels = trainer.predict_proba(test_loader)
+        td, tu, val_f1 = tune_thresholds(val_probs, val_labels)
+
+        argmax_preds = test_probs.argmax(1)
+        tuned_preds = apply_thresholds(test_probs, td, tu)
+        m_arg = compute_metrics(argmax_preds, test_labels)
+        m_tuned = compute_metrics(tuned_preds, test_labels)
+
+        print("\n── Test Results ─────────────────────────────────────")
+        print(f"  F1 Macro (argmax): {m_arg['f1_macro']:.4f}")
+        print(f"  F1 Macro (tuned):  {m_tuned['f1_macro']:.4f}   "
+              f"(down>={td:.2f} up>={tu:.2f} | val_f1={val_f1:.3f})")
+        print(f"  Accuracy (tuned):  {m_tuned['accuracy']:.4f}")
+        print()
+        print_report(tuned_preds, test_labels)
+    else:
+        preds, labels = trainer.predict(test_loader)
+        metrics = compute_metrics(preds, labels)
+        print("\n── Test Results ─────────────────────────────────────")
+        print(f"  Accuracy:    {metrics['accuracy']:.4f}")
+        print(f"  F1 Macro:    {metrics['f1_macro']:.4f}")
+        print(f"  F1 Weighted: {metrics['f1_weighted']:.4f}")
+        print()
+        print_report(preds, labels)
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", default="config/default.yaml")
-    parser.add_argument("--model", choices=["gcn", "gat", "sage", "cgnn"], default=None,
-                        help="override model.type (es. cgnn)")
+    parser.add_argument("--model", choices=["gcn", "gat", "sage", "cgnn", "stgcn"], default=None,
+                        help="override model.type (es. stgcn)")
     parser.add_argument("--hidden", type=int, default=None,
                         help="override model.hidden_channels (es. 160 per SAGE)")
     parser.add_argument("--lr", type=float, default=None,

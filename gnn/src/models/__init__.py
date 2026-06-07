@@ -3,8 +3,9 @@ from src.models.gcn import GCN
 from src.models.gat import GAT
 from src.models.sage import GraphSAGE
 from src.models.cgnn import CGNN
+from src.models.stgcn import STGCN
 
-_REGISTRY = {"gcn": GCN, "gat": GAT, "sage": GraphSAGE, "cgnn": CGNN}
+_REGISTRY = {"gcn": GCN, "gat": GAT, "sage": GraphSAGE, "cgnn": CGNN, "stgcn": STGCN}
 
 
 def build_model(cfg: dict) -> GNNClassifier:
@@ -39,5 +40,6 @@ def build_model(cfg: dict) -> GNNClassifier:
         "add_lag_feature": model_cfg.get("add_lag_feature", False),
         "cnn_channels":    pick("cnn_channels", 64),
         "cnn_kernel":      pick("cnn_kernel", 5),
+        "use_bin":         pick("use_bin", False),
     }
     return _REGISTRY[model_type](**params)

@@ -10,7 +10,9 @@ data:
   n_levels: 10
   n_volume_bins: 2000
   price_type: mid           # 'mid' (mid-price) or 'micro' (microprice)
-  threshold: 1.0e-4         # pct change threshold for flat/up/down
+  label_mode: abs           # 'pct' (soglia relativa) o 'abs' (soglia in unità di prezzo / tick)
+  threshold: 100            # LOBSTER prices sono in $×10000 → un tick ($0.01) = 100 unità
+                            # (pct userebbe es. 1.0e-4)
   prediction_horizon: 50    # k: label = direction of price[t+k] vs price[t]
 
   split_strategy: by_lag    # 'by_file' or 'by_lag'
@@ -46,6 +48,11 @@ model:
       hidden_channels: 175  # ~181k parametri (confrontabile con gli altri modelli)
       cnn_channels: 64
       cnn_kernel: 5
+      use_bin: false        # Bilinear Normalization: provata, peggiora (0.628→0.569) — disattivata
+    stgcn:                  # blocchi [temporale → grafo → temporale] alternati
+      hidden_channels: 110  # ~183k parametri
+      num_layers: 2         # numero di ST-blocchi
+      cnn_kernel: 3
 
 training:
   epochs: 50
@@ -58,6 +65,7 @@ training:
   lr_scheduler_factor: 0.5   # fattore di riduzione del LR (0.5 = dimezza)
   grad_clip: 1.0
   use_class_weights: false  # sostituito da balanced sampling in preprocessing
+  tune_threshold: true      # valutazione finale: riporta F1 argmax E con soglie tarate su val
   num_workers: 8        # parallelizza il data loading su CPU
   seed: 42
 
