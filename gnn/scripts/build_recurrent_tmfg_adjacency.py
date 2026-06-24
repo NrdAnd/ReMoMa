@@ -36,7 +36,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--output",
-        default="data/adjacency/recurrent_sparse_tmfg_lag100_bins2000_adjacency.tsv",
+        default="data/adjacency/recurrent_sparse_tmfg_lag100_bins2000_from_nmi_mean.tsv",
         help="Output TSV path, relative to gnn/ by default.",
     )
     parser.add_argument("--max-lag", type=int, default=100)

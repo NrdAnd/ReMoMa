@@ -65,42 +65,56 @@ python scripts/evaluate.py --checkpoint checkpoints/best.pt --config config/defa
 ## Recurrent Sparse STHNN Experiment
 
 The recurrent sparse lag-distance model is integrated as a separate model type,
-with its own 100-lag config and processed cache. The labeled adjacency currently
-used by the experiment is converted from the already-built project TMFG graph:
-
-```text
-tmfg/cisco_tmfg_adj_matrix_2000_bins.csv
-```
-
-and written to:
-
-```text
-gnn/data/adjacency/recurrent_sparse_tmfg_lag100_bins2000_from_full_tmfg_adjacency.tsv
-```
-
-To rebuild that adjacency from the existing TMFG CSV:
-
-```bash
-python scripts/build_recurrent_adjacency_from_tmfg.py
-```
-
-If the original NMI source is available, the TMFG can also be rebuilt directly
-from:
+with its own 100-lag config and processed cache. The canonical graph for this
+experiment is rebuilt directly from the Cisco NMI mean matrix:
 
 ```text
 csv_NMI_matrix/lob_similarity_nmi_rellag_lag150_bins2000_mean.csv
 ```
 
-using:
+Build the recurrent adjacency from that source with:
 
 ```bash
 python scripts/build_recurrent_tmfg_adjacency.py
 ```
 
+This writes:
+
+```text
+gnn/data/adjacency/recurrent_sparse_tmfg_lag100_bins2000_from_nmi_mean.tsv
+```
+
+The earlier adjacency converted from `tmfg/cisco_tmfg_adj_matrix_2000_bins.csv`
+was a bootstrap fallback used before the NMI mean source was available. Keep it
+only for reproducing that first exploratory run; do not use it for new results.
+
+Train the canonical recurrent sparse model:
+
 ```bash
 python scripts/preprocess_dataset.py --config config/recurrent_sparse_sthnn.yaml
 python scripts/train.py --config config/recurrent_sparse_sthnn.yaml
-python scripts/evaluate.py --checkpoint checkpoints/recurrent_sparse_sthnn/best.pt --config config/recurrent_sparse_sthnn.yaml
+```
+
+Evaluate the trained checkpoint:
+
+```bash
+python scripts/evaluate.py \
+  --checkpoint checkpoints/recurrent_sparse_sthnn_nmi_mean/best.pt \
+  --config config/recurrent_sparse_sthnn.yaml
+```
+
+After training, calibrate directional decision thresholds on validation and
+evaluate the same checkpoint with the saved thresholds:
+
+```bash
+python scripts/tune_threshold.py \
+  --checkpoint checkpoints/recurrent_sparse_sthnn_nmi_mean/best.pt \
+  --config config/recurrent_sparse_sthnn.yaml
+
+python scripts/evaluate.py \
+  --checkpoint checkpoints/recurrent_sparse_sthnn_nmi_mean/best.pt \
+  --config config/recurrent_sparse_sthnn.yaml \
+  --thresholds checkpoints/recurrent_sparse_sthnn_nmi_mean/thresholds.json
 ```
 
 Its adjacency must be a labeled CSV/TSV matrix whose index and columns match
@@ -112,10 +126,10 @@ For cloud runs, keep the same relative layout:
 ```text
 ReMoMa/
   lobster_cisco/                         # raw *_orderbook_10.csv files
-  tmfg/
-    cisco_tmfg_adj_matrix_2000_bins.csv
+  csv_NMI_matrix/
+    lob_similarity_nmi_rellag_lag150_bins2000_mean.csv
   gnn/
-    data/adjacency/recurrent_sparse_tmfg_lag100_bins2000_from_full_tmfg_adjacency.tsv
+    data/adjacency/recurrent_sparse_tmfg_lag100_bins2000_from_nmi_mean.tsv
 ```
 
 ## Label Distribution Analysis

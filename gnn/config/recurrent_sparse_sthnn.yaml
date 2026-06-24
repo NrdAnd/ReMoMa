@@ -1,7 +1,7 @@
 data:
   raw_dir: ../lobster_cisco
-  adj_matrix_path: data/adjacency/recurrent_sparse_tmfg_lag100_bins2000_from_full_tmfg_adjacency.tsv
-  processed_dir: data/processed_recurrent_lag100
+  adj_matrix_path: data/adjacency/recurrent_sparse_tmfg_lag100_bins2000_from_nmi_mean.tsv
+  processed_dir: data/processed_recurrent_lag100_nmi_mean
   use_precomputed: true
   force_preprocess: false
   preprocess_chunk_size: 2048
@@ -47,8 +47,8 @@ training:
   grad_clip: 1.0
   use_class_weights: false
   tune_threshold: true
-  num_workers: 8
+  num_workers: 4
   seed: 42
 
 paths:
-  checkpoints: checkpoints/recurrent_sparse_sthnn/
+  checkpoints: checkpoints/recurrent_sparse_sthnn_nmi_mean/

@@ -12,6 +12,7 @@ __pycache__/
 
 # GNN processed/precomputed data
 gnn/data/processed*/
+gnn/data/adjacency/recurrent_sparse_tmfg_lag100_bins2000_from_nmi.tsv
 
 # Training artifacts
 gnn/checkpoints/

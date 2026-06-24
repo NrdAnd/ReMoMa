@@ -7,6 +7,7 @@ Usage:
 """
 
 import argparse
+import json
 import random
 import sys
 from pathlib import Path
@@ -250,24 +251,49 @@ def main(config_path: str, overrides: dict | None = None) -> None:
     trainer.load_best()
 
     if cfg["training"].get("tune_threshold", False):
-        from src.training.threshold import apply_thresholds, tune_thresholds
+        from src.training.threshold import apply_thresholds, decision_metrics, search_thresholds
 
         val_probs, val_labels = trainer.predict_proba(val_loader)
         test_probs, test_labels = trainer.predict_proba(test_loader)
-        td, tu, val_f1 = tune_thresholds(val_probs, val_labels)
+        search = search_thresholds(val_probs, val_labels)
+        td, tu = search["t_down"], search["t_up"]
 
         argmax_preds = test_probs.argmax(1)
         tuned_preds = apply_thresholds(test_probs, td, tu)
         m_arg = compute_metrics(argmax_preds, test_labels)
         m_tuned = compute_metrics(tuned_preds, test_labels)
+        signal_arg = decision_metrics(argmax_preds, test_labels)
+        signal_tuned = decision_metrics(tuned_preds, test_labels)
 
         print("\n── Test Results ─────────────────────────────────────")
         print(f"  F1 Macro (argmax): {m_arg['f1_macro']:.4f}")
         print(f"  F1 Macro (tuned):  {m_tuned['f1_macro']:.4f}   "
-              f"(down>={td:.2f} up>={tu:.2f} | val_f1={val_f1:.3f})")
+              f"(down>={td:.2f} up>={tu:.2f} | val_f1={search['metrics']['f1_macro']:.3f})")
         print(f"  Accuracy (tuned):  {m_tuned['accuracy']:.4f}")
+        print(
+            "  Signal precision: "
+            f"{signal_arg['signal_precision']:.4f} → {signal_tuned['signal_precision']:.4f}"
+        )
+        print(
+            "  Flat→signal rate: "
+            f"{signal_arg['flat_to_signal_rate']:.4f} → {signal_tuned['flat_to_signal_rate']:.4f}"
+        )
         print()
         print_report(tuned_preds, test_labels)
+
+        threshold_payload = {
+            "checkpoint": str(ckpt_dir / "best.pt"),
+            "config": str(config_path),
+            "model_type": model_type,
+            "thresholds": {"down": td, "up": tu},
+            "validation_tuned_metrics": search["metrics"],
+            "test_argmax_metrics": signal_arg,
+            "test_tuned_metrics": signal_tuned,
+            "search": search["search"] | {"objective": search["objective"], "score": search["score"]},
+        }
+        threshold_path = ckpt_dir / "thresholds.json"
+        threshold_path.write_text(json.dumps(threshold_payload, indent=2), encoding="utf-8")
+        print(f"\nThresholds saved to {threshold_path}")
     else:
         preds, labels = trainer.predict(test_loader)
         metrics = compute_metrics(preds, labels)
