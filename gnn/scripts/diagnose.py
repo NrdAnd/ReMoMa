@@ -25,7 +25,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from src.dataset.preprocessing import build_processed_paths
 from src.graph.adjacency import load_tmfg_edge_index
-from src.models import build_model
+from src.models import build_model, is_recurrent_sparse_model
 
 
 def load_real_batch(paths, n: int, num_nodes: int, balanced: bool = True):
@@ -165,11 +165,16 @@ def main(config_path: str) -> None:
     paths = build_processed_paths(data_cfg["processed_dir"])
     num_nodes = 2 * int(data_cfg["n_levels"]) * (int(data_cfg["n_lags"]) + 1)
 
-    edge_index = load_tmfg_edge_index(
-        data_cfg["adj_matrix_path"],
-        cache_path=Path(data_cfg["processed_dir"]) / "edge_index.pt",
-    )
-    print(f"Graph: {num_nodes} nodes | {edge_index.shape[1]} edges")
+    model_type = cfg["model"]["type"].lower()
+    if is_recurrent_sparse_model(model_type):
+        edge_index = torch.empty((2, 0), dtype=torch.long)
+        print(f"Graph: {num_nodes} recurrent sparse nodes | edge_index skipped")
+    else:
+        edge_index = load_tmfg_edge_index(
+            data_cfg["adj_matrix_path"],
+            cache_path=Path(data_cfg["processed_dir"]) / "edge_index.pt",
+        )
+        print(f"Graph: {num_nodes} nodes | {edge_index.shape[1]} edges")
 
     model = build_model(cfg).to(device)
     print(f"Model: {cfg['model']['type'].upper()} | "

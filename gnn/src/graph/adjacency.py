@@ -4,6 +4,30 @@ import torch
 from pathlib import Path
 
 
+def load_labeled_adjacency(path: str | Path) -> pd.DataFrame:
+    """Load a labeled square adjacency matrix from CSV/TSV.
+
+    RecurrentSparseSTHNN uses the row/column labels to infer feature names and
+    lag distances, so labels must be preserved exactly and in the same order on
+    both axes.
+    """
+    path = Path(path)
+    sep = "\t" if path.suffix.lower() == ".tsv" else ","
+    adj = pd.read_csv(path, sep=sep, index_col=0)
+
+    index_labels = [str(label) for label in adj.index]
+    column_labels = [str(label) for label in adj.columns]
+    if index_labels != column_labels:
+        raise ValueError(
+            "Adjacency index and columns must contain the same labels in the same order "
+            f"({path})."
+        )
+    if adj.shape[0] != adj.shape[1]:
+        raise ValueError(f"Adjacency must be square, got shape {adj.shape} ({path}).")
+
+    return adj
+
+
 def load_tmfg_edge_index(
     csv_path: str | Path,
     cache_path: str | Path | None = None,

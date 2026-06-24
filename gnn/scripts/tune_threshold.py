@@ -27,7 +27,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 from src.dataset.lob_dataset import FastLOBDataset, StaticLOBTensorDataset
 from src.dataset.preprocessing import build_processed_paths
 from src.graph.adjacency import load_tmfg_edge_index
-from src.models import build_model
+from src.models import build_model, is_recurrent_sparse_model
 from src.training.threshold import apply_thresholds, tune_thresholds
 
 
@@ -57,13 +57,20 @@ def main(config_path: str, checkpoint: str, model: str | None = None) -> None:
     data_cfg = cfg["data"]
     paths = build_processed_paths(data_cfg["processed_dir"])
 
-    edge_index = load_tmfg_edge_index(
-        data_cfg["adj_matrix_path"],
-        cache_path=Path(data_cfg["processed_dir"]) / "edge_index.pt",
-    )
-
     model_type = cfg["model"]["type"].lower()
-    static_mode = bool(cfg["training"].get("static_graph_batching", False)) and model_type in ("gcn", "cgnn", "stgcn")
+    recurrent_sparse = is_recurrent_sparse_model(model_type)
+    if recurrent_sparse:
+        edge_index = torch.empty((2, 0), dtype=torch.long)
+    else:
+        edge_index = load_tmfg_edge_index(
+            data_cfg["adj_matrix_path"],
+            cache_path=Path(data_cfg["processed_dir"]) / "edge_index.pt",
+        )
+
+    static_mode = recurrent_sparse or (
+        bool(cfg["training"].get("static_graph_batching", False))
+        and model_type in ("gcn", "cgnn", "stgcn")
+    )
     static_edge = edge_index.to(device) if static_mode else None
 
     bs = int(cfg["training"]["batch_size"])
@@ -110,7 +117,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", default="config/default.yaml")
     parser.add_argument("--checkpoint", default="checkpoints/best.pt")
-    parser.add_argument("--model", choices=["gcn", "gat", "sage", "cgnn", "stgcn"], default=None,
+    parser.add_argument("--model", choices=["gcn", "gat", "sage", "cgnn", "stgcn", "recurrent_sparse_sthnn"], default=None,
                         help="model type of the checkpoint (es. cgnn)")
     args = parser.parse_args()
     main(args.config, args.checkpoint, args.model)

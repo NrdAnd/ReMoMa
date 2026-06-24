@@ -12,18 +12,19 @@ from pathlib import Path
 
 import torch
 import yaml
+from torch.utils.data import DataLoader as TorchDataLoader
 from torch_geometric.loader import DataLoader
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from src.dataset.lob_dataset import FastLOBDataset
+from src.dataset.lob_dataset import FastLOBDataset, StaticLOBTensorDataset
 from src.dataset.preprocessing import (
     build_processed_paths,
     has_compatible_processed_dataset,
     preprocess_to_disk,
 )
 from src.graph.adjacency import load_tmfg_edge_index
-from src.models import build_model
+from src.models import build_model, is_recurrent_sparse_model
 from src.training.metrics import compute_metrics, print_report
 from src.training.trainer import Trainer
 
@@ -40,18 +41,29 @@ def main(config_path: str, checkpoint_path: str) -> None:
         preprocess_to_disk(cfg, force=False, verbose=True)
 
     paths = build_processed_paths(data_cfg["processed_dir"])
-    edge_index = load_tmfg_edge_index(
-        data_cfg["adj_matrix_path"],
-        cache_path=Path(data_cfg["processed_dir"]) / "edge_index.pt",
-    )
-
-    test_ds = FastLOBDataset(str(paths["X_test"]), str(paths["y_test"]), edge_index)
-    test_loader = DataLoader(
-        test_ds,
-        batch_size=cfg["training"]["batch_size"],
-        shuffle=False,
-        num_workers=cfg["training"].get("num_workers", 0),
-    )
+    model_type = cfg["model"]["type"].lower()
+    recurrent_sparse = is_recurrent_sparse_model(model_type)
+    if recurrent_sparse:
+        edge_index = torch.empty((2, 0), dtype=torch.long)
+        test_ds = StaticLOBTensorDataset(str(paths["X_test"]), str(paths["y_test"]))
+        test_loader = TorchDataLoader(
+            test_ds,
+            batch_size=cfg["training"]["batch_size"],
+            shuffle=False,
+            num_workers=cfg["training"].get("num_workers", 0),
+        )
+    else:
+        edge_index = load_tmfg_edge_index(
+            data_cfg["adj_matrix_path"],
+            cache_path=Path(data_cfg["processed_dir"]) / "edge_index.pt",
+        )
+        test_ds = FastLOBDataset(str(paths["X_test"]), str(paths["y_test"]), edge_index)
+        test_loader = DataLoader(
+            test_ds,
+            batch_size=cfg["training"]["batch_size"],
+            shuffle=False,
+            num_workers=cfg["training"].get("num_workers", 0),
+        )
 
     model = build_model(cfg).to(device)
     model.load_state_dict(torch.load(checkpoint_path, map_location=device, weights_only=True))
@@ -63,6 +75,8 @@ def main(config_path: str, checkpoint_path: str) -> None:
         criterion=None,
         device=device,
         checkpoint_dir=Path(checkpoint_path).parent,
+        static_graph_batching=recurrent_sparse,
+        static_edge_index=edge_index.to(device) if recurrent_sparse else None,
     )
     preds, labels = trainer.predict(test_loader)
     metrics = compute_metrics(preds, labels)

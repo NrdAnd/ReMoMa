@@ -26,7 +26,7 @@ from src.dataset.preprocessing import (
     preprocess_to_disk,
 )
 from src.graph.adjacency import load_tmfg_edge_index
-from src.models import build_model
+from src.models import build_model, is_recurrent_sparse_model
 from src.training.metrics import compute_metrics, print_report
 from src.training.trainer import Trainer
 
@@ -134,17 +134,31 @@ def main(config_path: str, overrides: dict | None = None) -> None:
 
     paths = build_processed_paths(data_cfg["processed_dir"])
 
-    # ── Edge index (static) ────────────────────────────────────
+    # ── Graph structure ────────────────────────────────────────
     processed_dir = Path(data_cfg["processed_dir"])
-    edge_index = load_tmfg_edge_index(
-        data_cfg["adj_matrix_path"],
-        cache_path=processed_dir / "edge_index.pt",
-    )
-    print(f"\n[2/5] Graph: {2 * data_cfg['n_levels'] * (data_cfg['n_lags'] + 1)} nodes | {edge_index.shape[1]} directed edges")
+    model_type = cfg["model"]["type"].lower()
+    recurrent_sparse = is_recurrent_sparse_model(model_type)
+    num_nodes = 2 * data_cfg["n_levels"] * (data_cfg["n_lags"] + 1)
+
+    if recurrent_sparse:
+        edge_index = torch.empty((2, 0), dtype=torch.long)
+        print(
+            f"\n[2/5] Recurrent sparse graph: {num_nodes} nodes | "
+            f"adjacency={data_cfg['adj_matrix_path']}"
+        )
+    else:
+        edge_index = load_tmfg_edge_index(
+            data_cfg["adj_matrix_path"],
+            cache_path=processed_dir / "edge_index.pt",
+        )
+        print(f"\n[2/5] Graph: {num_nodes} nodes | {edge_index.shape[1]} directed edges")
 
     static_graph_batching = bool(cfg["training"].get("static_graph_batching", False))
-    model_type = cfg["model"]["type"].lower()
-    use_static_mode = static_graph_batching and model_type in ("gcn", "cgnn", "stgcn")
+    use_static_mode = recurrent_sparse or (
+        static_graph_batching and model_type in ("gcn", "cgnn", "stgcn")
+    )
+    if recurrent_sparse and not static_graph_batching:
+        print("[info] recurrent_sparse_sthnn uses tensor batching; enabling static path.")
     if static_graph_batching and not use_static_mode:
         print(
             f"[warn] static_graph_batching requested, but model.type='{model_type}' "
@@ -175,7 +189,6 @@ def main(config_path: str, overrides: dict | None = None) -> None:
     else:
         n_lags = int(data_cfg["n_lags"])
         n_levels = int(data_cfg["n_levels"])
-        num_nodes = 2 * n_levels * (n_lags + 1)
         collate_fn = make_collate_fn(edge_index, cfg["training"]["batch_size"], num_nodes)
         loader_kw = dict(loader_kw_base)
         loader_kw["collate_fn"] = collate_fn
@@ -187,6 +200,13 @@ def main(config_path: str, overrides: dict | None = None) -> None:
     print(f"\n[3/5] Initializing model ({cfg['model']['type'].upper()})...")
     model = build_model(cfg).to(device)
     print(f"  Trainable parameters: {model.count_parameters():,}")
+    if recurrent_sparse:
+        print(
+            "  Recurrent blocks: "
+            f"{model.recurrent_edge_key_count:,} | temporal edges: "
+            f"{model.recurrent_temporal_edge_count:,} | same-lag edges: "
+            f"{model.recurrent_same_lag_edge_count:,}"
+        )
 
     class_weights = None
     if cfg["training"].get("use_class_weights", True):
@@ -262,7 +282,7 @@ def main(config_path: str, overrides: dict | None = None) -> None:
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", default="config/default.yaml")
-    parser.add_argument("--model", choices=["gcn", "gat", "sage", "cgnn", "stgcn"], default=None,
+    parser.add_argument("--model", choices=["gcn", "gat", "sage", "cgnn", "stgcn", "recurrent_sparse_sthnn"], default=None,
                         help="override model.type (es. stgcn)")
     parser.add_argument("--hidden", type=int, default=None,
                         help="override model.hidden_channels (es. 160 per SAGE)")

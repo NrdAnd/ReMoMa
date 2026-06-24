@@ -62,6 +62,62 @@ standard PyG batching path.
 python scripts/evaluate.py --checkpoint checkpoints/best.pt --config config/default.yaml
 ```
 
+## Recurrent Sparse STHNN Experiment
+
+The recurrent sparse lag-distance model is integrated as a separate model type,
+with its own 100-lag config and processed cache. The labeled adjacency currently
+used by the experiment is converted from the already-built project TMFG graph:
+
+```text
+tmfg/cisco_tmfg_adj_matrix_2000_bins.csv
+```
+
+and written to:
+
+```text
+gnn/data/adjacency/recurrent_sparse_tmfg_lag100_bins2000_from_full_tmfg_adjacency.tsv
+```
+
+To rebuild that adjacency from the existing TMFG CSV:
+
+```bash
+python scripts/build_recurrent_adjacency_from_tmfg.py
+```
+
+If the original NMI source is available, the TMFG can also be rebuilt directly
+from:
+
+```text
+csv_NMI_matrix/lob_similarity_nmi_rellag_lag150_bins2000_mean.csv
+```
+
+using:
+
+```bash
+python scripts/build_recurrent_tmfg_adjacency.py
+```
+
+```bash
+python scripts/preprocess_dataset.py --config config/recurrent_sparse_sthnn.yaml
+python scripts/train.py --config config/recurrent_sparse_sthnn.yaml
+python scripts/evaluate.py --checkpoint checkpoints/recurrent_sparse_sthnn/best.pt --config config/recurrent_sparse_sthnn.yaml
+```
+
+Its adjacency must be a labeled CSV/TSV matrix whose index and columns match
+labels such as `ASKs1_lag100`. The model internally reorders the existing
+processed LOB tensor order to match that adjacency order.
+
+For cloud runs, keep the same relative layout:
+
+```text
+ReMoMa/
+  lobster_cisco/                         # raw *_orderbook_10.csv files
+  tmfg/
+    cisco_tmfg_adj_matrix_2000_bins.csv
+  gnn/
+    data/adjacency/recurrent_sparse_tmfg_lag100_bins2000_from_full_tmfg_adjacency.tsv
+```
+
 ## Label Distribution Analysis
 
 Use the utility below to inspect class imbalance across horizon/threshold/price settings:
