@@ -111,6 +111,10 @@ def main(config_path: str, overrides: dict | None = None) -> None:
         cfg["training"]["lr"] = float(overrides["lr"])
     if overrides.get("epochs") is not None:
         cfg["training"]["epochs"] = int(overrides["epochs"])
+    if overrides.get("seed") is not None:
+        cfg["training"]["seed"] = int(overrides["seed"])
+    if overrides.get("checkpoint_dir") is not None:
+        cfg["paths"]["checkpoints"] = str(overrides["checkpoint_dir"])
     applied = {k: v for k, v in overrides.items() if v is not None and k != "config"}
     if applied:
         print(f"CLI overrides: {applied}\n")
@@ -316,5 +320,9 @@ if __name__ == "__main__":
                         help="override training.lr")
     parser.add_argument("--epochs", type=int, default=None,
                         help="override training.epochs")
+    parser.add_argument("--seed", type=int, default=None,
+                        help="override training.seed")
+    parser.add_argument("--checkpoint-dir", default=None,
+                        help="override paths.checkpoints")
     args = parser.parse_args()
     main(args.config, vars(args))

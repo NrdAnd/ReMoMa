@@ -117,6 +117,46 @@ python scripts/evaluate.py \
   --thresholds checkpoints/recurrent_sparse_sthnn_nmi_mean/thresholds.json
 ```
 
+Optional probability ensemble / bagging run:
+
+```bash
+python scripts/train.py \
+  --config config/recurrent_sparse_sthnn.yaml \
+  --seed 42 \
+  --checkpoint-dir checkpoints/recurrent_sparse_sthnn_nmi_mean_seed42
+
+python scripts/train.py \
+  --config config/recurrent_sparse_sthnn.yaml \
+  --seed 123 \
+  --checkpoint-dir checkpoints/recurrent_sparse_sthnn_nmi_mean_seed123
+
+python scripts/train.py \
+  --config config/recurrent_sparse_sthnn.yaml \
+  --seed 777 \
+  --checkpoint-dir checkpoints/recurrent_sparse_sthnn_nmi_mean_seed777
+```
+
+Evaluate the ensemble by averaging checkpoint probabilities. The default
+threshold objective is plain `macro_f1`, with no flat false-positive penalty:
+
+```bash
+python scripts/ensemble_evaluate.py \
+  --config config/recurrent_sparse_sthnn.yaml \
+  --checkpoints \
+    checkpoints/recurrent_sparse_sthnn_nmi_mean_seed42/best.pt \
+    checkpoints/recurrent_sparse_sthnn_nmi_mean_seed123/best.pt \
+    checkpoints/recurrent_sparse_sthnn_nmi_mean_seed777/best.pt \
+  --save-thresholds checkpoints/recurrent_sparse_sthnn_nmi_mean_ensemble/thresholds.json
+```
+
+For a stricter day-held-out experiment, use the by-file config. This trains on
+files `[0, 1, 2]`, validates on file `[3]`, and tests on file `[4]`:
+
+```bash
+python scripts/preprocess_dataset.py --config config/recurrent_sparse_sthnn_by_file.yaml
+python scripts/train.py --config config/recurrent_sparse_sthnn_by_file.yaml
+```
+
 Its adjacency must be a labeled CSV/TSV matrix whose index and columns match
 labels such as `ASKs1_lag100`. The model internally reorders the existing
 processed LOB tensor order to match that adjacency order.
