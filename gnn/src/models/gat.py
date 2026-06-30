@@ -1,8 +1,9 @@
+import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch import Tensor
 from torch_geometric.data import Data
-from torch_geometric.nn import GATConv, global_mean_pool
+from torch_geometric.nn import GATConv, global_max_pool, global_mean_pool
 
 from src.models.base import GNNClassifier
 
@@ -47,8 +48,10 @@ class GAT(GNNClassifier):
             self.convs.append(GATConv(hidden_channels * num_heads, hidden_channels, heads=1, dropout=dropout, concat=False))
             self.norms.append(nn.LayerNorm(hidden_channels))
 
+        # head input = concat[mean pool, max pool] → 2 * hidden_channels
+        # (parity with GCN/SAGE: max preserves the salient node mean washes out)
         self.head = nn.Sequential(
-            nn.Linear(hidden_channels, hidden_channels // 2),
+            nn.Linear(2 * hidden_channels, hidden_channels // 2),
             nn.ELU(),
             nn.Dropout(dropout),
             nn.Linear(hidden_channels // 2, num_classes),
@@ -65,4 +68,7 @@ class GAT(GNNClassifier):
             x = F.elu(x)
             x = F.dropout(x, p=self.dropout, training=self.training)
 
-        return self.head(global_mean_pool(x, batch))
+        pooled = torch.cat(
+            [global_mean_pool(x, batch), global_max_pool(x, batch)], dim=1
+        )
+        return self.head(pooled)

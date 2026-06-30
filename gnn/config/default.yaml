@@ -40,10 +40,11 @@ model:
   # (es. SAGE ha ~2x parametri/layer → hidden più basso per restare a ~180-200k)
   overrides:
     sage:
-      hidden_channels: 160
-    gat:
-      hidden_channels: 160
+      hidden_channels: 160  # ~180k param (SAGEConv ha 2 matrici/layer: self + neighbor)
+    gat:                    # attenzione sugli archi → può pesare diversamente i tipi di arco TMFG
+      hidden_channels: 192  # ~185k param (con mean+max pool e 2 layer)
       num_heads: 2
+      num_layers: 2         # su 3020 nodi 3 layer over-smoothano; 2 hop bastano
     cgnn:                   # CNN temporale (sui lag) + GNN spaziale (sul grafo)
       hidden_channels: 175  # ~181k parametri (confrontabile con gli altri modelli)
       cnn_channels: 64
