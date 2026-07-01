@@ -31,6 +31,7 @@ class MessageEdge:
     source_idx: int
     target_idx: int
     block_idx: int
+    weight: float = 1.0
 
 
 @dataclass(frozen=True)
@@ -134,6 +135,9 @@ class BaseRecurrentSparseSTHNN(nn.Module):
         readout_mode: str = READOUT_MODE_ALL_LAGS,
         readout_dropout: float = 0.15,
         synthetic_edge_dropout: float = 0.0,
+        in_channels: int = 2,
+        use_edge_weights: bool = False,
+        edge_weight_normalization: str = "mean",
         out_dim: int = 3,
     ) -> None:
         super().__init__()
@@ -143,6 +147,7 @@ class BaseRecurrentSparseSTHNN(nn.Module):
             readout_mode,
             readout_dropout,
             synthetic_edge_dropout,
+            in_channels,
         )
 
         self.node_labels = graph.labels
@@ -150,10 +155,13 @@ class BaseRecurrentSparseSTHNN(nn.Module):
         self.edge_keys = graph.edge_keys
         self.hidden_dim = int(hidden_dim)
         self.message_iterations = int(message_iterations)
+        self.in_channels = int(in_channels)
+        self.use_edge_weights = bool(use_edge_weights)
+        self.edge_weight_normalization = str(edge_weight_normalization)
         self.out_dim = int(out_dim)
 
         self.node_encoder = nn.Sequential(
-            nn.Linear(2, self.hidden_dim),
+            nn.Linear(self.in_channels, self.hidden_dim),
             nn.ReLU(),
             nn.Linear(self.hidden_dim, self.hidden_dim),
             nn.ReLU(),
@@ -220,21 +228,22 @@ class BaseRecurrentSparseSTHNN(nn.Module):
             )
 
         flat_features = x.squeeze(1).reshape(batch_size, -1)
-        if flat_features.shape[1] % 2 != 0:
+        if flat_features.shape[1] % self.in_channels != 0:
             raise ValueError(
-                "RecurrentSparseSTHNN expects price/volume pairs in the input; "
-                f"got flattened feature count {flat_features.shape[1]}"
+                "RecurrentSparseSTHNN input feature count is not divisible by "
+                f"in_channels={self.in_channels}; got flattened feature count "
+                f"{flat_features.shape[1]}."
             )
 
-        input_nodes = flat_features.shape[1] // 2
+        input_nodes = flat_features.shape[1] // self.in_channels
         if input_nodes != self.node_count:
             raise ValueError(
                 "RecurrentSparseSTHNN input/graph mismatch: input contains "
-                f"{input_nodes} price-volume pairs, but the graph has "
+                f"{input_nodes} nodes, but the graph has "
                 f"{self.node_count} nodes."
             )
 
-        return flat_features.reshape(batch_size, self.node_count, 2)
+        return flat_features.reshape(batch_size, self.node_count, self.in_channels)
 
     def _temporal_messages(self, hidden: Tensor) -> Tensor:
         return self._messages(
@@ -242,6 +251,7 @@ class BaseRecurrentSparseSTHNN(nn.Module):
             self.temporal_src_idx,
             self.temporal_dst_idx,
             self.temporal_block_idx,
+            self.temporal_weight,
         )
 
     def _same_lag_messages(self, hidden: Tensor) -> Tensor:
@@ -250,6 +260,7 @@ class BaseRecurrentSparseSTHNN(nn.Module):
             self.same_lag_src_idx,
             self.same_lag_dst_idx,
             self.same_lag_block_idx,
+            self.same_lag_weight,
         )
 
     def _synthetic_temporal_messages(self, hidden: Tensor) -> Tensor:
@@ -258,6 +269,7 @@ class BaseRecurrentSparseSTHNN(nn.Module):
             self.synthetic_temporal_src_idx,
             self.synthetic_temporal_dst_idx,
             self.synthetic_temporal_block_idx,
+            self.synthetic_temporal_weight,
             edge_dropout=self.synthetic_edge_dropout,
         )
 
@@ -267,6 +279,7 @@ class BaseRecurrentSparseSTHNN(nn.Module):
         source_idx: Tensor,
         target_idx: Tensor,
         block_idx: Tensor,
+        edge_weight: Tensor,
         edge_dropout: EdgeMessageDropout | None = None,
     ) -> Tensor:
         messages = hidden.new_zeros(hidden.shape)
@@ -276,6 +289,7 @@ class BaseRecurrentSparseSTHNN(nn.Module):
         source_hidden = hidden.index_select(1, source_idx)
         edge_blocks = self.edge_blocks.index_select(0, block_idx)
         edge_messages = torch.einsum("bed,eod->beo", source_hidden, edge_blocks)
+        edge_messages = edge_messages * edge_weight.view(1, -1, 1)
         if edge_dropout is not None:
             edge_messages = edge_dropout(edge_messages)
         scatter_idx = target_idx.view(1, -1, 1).expand(
@@ -295,10 +309,11 @@ class BaseRecurrentSparseSTHNN(nn.Module):
         return updated.reshape(batch_size, self.node_count, self.hidden_dim)
 
     def _register_edges(self, prefix: str, edges: Sequence[MessageEdge]) -> None:
-        source_idx, target_idx, block_idx = _edge_tensors(edges)
+        source_idx, target_idx, block_idx, weight = _edge_tensors(edges)
         self.register_buffer(f"{prefix}_src_idx", source_idx, persistent=False)
         self.register_buffer(f"{prefix}_dst_idx", target_idx, persistent=False)
         self.register_buffer(f"{prefix}_block_idx", block_idx, persistent=False)
+        self.register_buffer(f"{prefix}_weight", weight, persistent=False)
 
     @staticmethod
     def _validate_settings(
@@ -307,7 +322,10 @@ class BaseRecurrentSparseSTHNN(nn.Module):
         readout_mode: str,
         readout_dropout: float,
         synthetic_edge_dropout: float,
+        in_channels: int,
     ) -> None:
+        if in_channels < 1:
+            raise ValueError(f"recurrent in_channels must be >= 1, got {in_channels}")
         if hidden_dim < 1:
             raise ValueError(f"recurrent_hidden_dim must be >= 1, got {hidden_dim}")
         if message_iterations < 1:
@@ -341,14 +359,24 @@ class RecurrentSparseSTHNN(BaseRecurrentSparseSTHNN):
         message_iterations: int = 1,
         readout_mode: str = READOUT_MODE_ALL_LAGS,
         readout_dropout: float = 0.15,
+        in_channels: int = 2,
+        use_edge_weights: bool = False,
+        edge_weight_normalization: str = "mean",
         out_dim: int = 3,
     ) -> None:
         super().__init__(
-            build_message_graph(adjacency),
+            build_message_graph(
+                adjacency,
+                use_edge_weights=use_edge_weights,
+                edge_weight_normalization=edge_weight_normalization,
+            ),
             hidden_dim=hidden_dim,
             message_iterations=message_iterations,
             readout_mode=readout_mode,
             readout_dropout=readout_dropout,
+            in_channels=in_channels,
+            use_edge_weights=use_edge_weights,
+            edge_weight_normalization=edge_weight_normalization,
             out_dim=out_dim,
         )
 
@@ -364,9 +392,16 @@ class SelfLagRecurrentSparseSTHNN(BaseRecurrentSparseSTHNN):
         readout_dropout: float = 0.15,
         add_self_lag_edges: bool = True,
         self_lag_edge_dropout: float = 0.15,
+        in_channels: int = 2,
+        use_edge_weights: bool = False,
+        edge_weight_normalization: str = "mean",
         out_dim: int = 3,
     ) -> None:
-        base_graph = build_message_graph(adjacency)
+        base_graph = build_message_graph(
+            adjacency,
+            use_edge_weights=use_edge_weights,
+            edge_weight_normalization=edge_weight_normalization,
+        )
         graph = add_missing_self_lag_edges(base_graph) if add_self_lag_edges else base_graph
         super().__init__(
             graph,
@@ -375,6 +410,9 @@ class SelfLagRecurrentSparseSTHNN(BaseRecurrentSparseSTHNN):
             readout_mode=readout_mode,
             readout_dropout=readout_dropout,
             synthetic_edge_dropout=self_lag_edge_dropout if add_self_lag_edges else 0.0,
+            in_channels=in_channels,
+            use_edge_weights=use_edge_weights,
+            edge_weight_normalization=edge_weight_normalization,
             out_dim=out_dim,
         )
 
@@ -405,15 +443,15 @@ class RecurrentSparseSTHNNClassifier(GNNClassifier):
         readout_dropout: float = 0.15,
         add_self_lag_edges: bool = False,
         self_lag_edge_dropout: float = 0.15,
+        use_edge_weights: bool = False,
+        edge_weight_normalization: str = "mean",
         **_kwargs,
     ) -> None:
         super().__init__()
-        if in_channels != 2:
-            raise ValueError(
-                "RecurrentSparseSTHNNClassifier expects two node features "
-                f"[price, volume], got in_channels={in_channels}."
-            )
         del dropout, num_layers
+        in_channels = int(in_channels)
+        if in_channels < 1:
+            raise ValueError(f"in_channels must be >= 1, got {in_channels}")
 
         recurrent_hidden_dim = int(
             hidden_dim
@@ -431,6 +469,9 @@ class RecurrentSparseSTHNNClassifier(GNNClassifier):
                 readout_dropout=readout_dropout,
                 add_self_lag_edges=add_self_lag_edges,
                 self_lag_edge_dropout=self_lag_edge_dropout,
+                in_channels=in_channels,
+                use_edge_weights=use_edge_weights,
+                edge_weight_normalization=edge_weight_normalization,
                 out_dim=num_classes,
             )
         else:
@@ -440,6 +481,9 @@ class RecurrentSparseSTHNNClassifier(GNNClassifier):
                 message_iterations=message_iterations,
                 readout_mode=readout_mode,
                 readout_dropout=readout_dropout,
+                in_channels=in_channels,
+                use_edge_weights=use_edge_weights,
+                edge_weight_normalization=edge_weight_normalization,
                 out_dim=num_classes,
             )
 
@@ -470,6 +514,9 @@ class RecurrentSparseSTHNNClassifier(GNNClassifier):
         self.num_nodes = expected_nodes
         self.n_lags = int(n_lags)
         self.n_levels = int(n_levels)
+        self.in_channels = in_channels
+        self.use_edge_weights = bool(use_edge_weights)
+        self.edge_weight_normalization = str(edge_weight_normalization)
 
         # Useful metadata for logging/debugging.
         self.recurrent_edge_key_count = len(self.core.edge_keys)
@@ -486,10 +533,11 @@ class RecurrentSparseSTHNNClassifier(GNNClassifier):
                 "RecurrentSparseSTHNNClassifier.forward_static expects "
                 f"[B, N, F], got {tuple(x_batch.shape)}."
             )
-        if x_batch.shape[1] != self.num_nodes or x_batch.shape[2] != 2:
+        if x_batch.shape[1] != self.num_nodes or x_batch.shape[2] != self.in_channels:
             raise ValueError(
                 "RecurrentSparseSTHNNClassifier input must be [B, "
-                f"{self.num_nodes}, 2], got {tuple(x_batch.shape)}."
+                f"{self.num_nodes}, {self.in_channels}], got "
+                f"{tuple(x_batch.shape)}."
             )
         x_ordered = x_batch.index_select(1, self.node_reorder_idx)
         return self.core(x_ordered.unsqueeze(1))
@@ -501,11 +549,23 @@ class RecurrentSparseSTHNNClassifier(GNNClassifier):
         return self.forward_static(x_batch)
 
 
-def build_message_graph(adjacency: object) -> MessageGraph:
+def build_message_graph(
+    adjacency: object,
+    *,
+    use_edge_weights: bool = False,
+    edge_weight_normalization: str = "mean",
+) -> MessageGraph:
     labels = _node_labels_from_adjacency(adjacency)
     nodes = _parse_lagged_nodes(labels)
     node_index = {(node.feature, node.lag): idx for idx, node in enumerate(nodes)}
     adjacency_matrix = _adjacency_matrix(adjacency, expected_size=len(labels))
+    if not use_edge_weights:
+        adjacency_matrix = (adjacency_matrix != 0).astype(float)
+    elif edge_weight_normalization not in {"none", "mean", "max"}:
+        raise ValueError(
+            "edge_weight_normalization must be one of: none, mean, max; "
+            f"got {edge_weight_normalization!r}"
+        )
 
     edge_keys: list[EdgeKey] = []
     key_index: dict[EdgeKey, int] = {}
@@ -521,6 +581,7 @@ def build_message_graph(adjacency: object) -> MessageGraph:
             reverse_weight = adjacency_matrix[col_idx, row_idx]
             if forward_weight == 0 and reverse_weight == 0:
                 continue
+            edge_weight = _undirected_edge_weight(forward_weight, reverse_weight)
 
             left = nodes[row_idx]
             right = nodes[col_idx]
@@ -534,6 +595,7 @@ def build_message_graph(adjacency: object) -> MessageGraph:
                     key_index,
                     same_lag_edges,
                     same_lag_seen,
+                    edge_weight,
                 )
             else:
                 target, source = _temporal_target_source(left, right)
@@ -547,7 +609,18 @@ def build_message_graph(adjacency: object) -> MessageGraph:
                     key_index,
                     temporal_edges,
                     temporal_seen,
+                    edge_weight,
                 )
+
+    if use_edge_weights:
+        temporal_edges = _normalize_edge_weights(
+            temporal_edges,
+            edge_weight_normalization,
+        )
+        same_lag_edges = _normalize_edge_weights(
+            same_lag_edges,
+            edge_weight_normalization,
+        )
 
     return MessageGraph(
         labels=labels,
@@ -652,6 +725,41 @@ def _adjacency_matrix(adjacency: object, expected_size: int) -> np.ndarray:
     return matrix
 
 
+def _undirected_edge_weight(forward_weight: float, reverse_weight: float) -> float:
+    """Collapse a possibly asymmetric adjacency entry into one scalar weight."""
+    weights = [abs(float(w)) for w in (forward_weight, reverse_weight) if w != 0]
+    return max(weights) if weights else 1.0
+
+
+def _normalize_edge_weights(
+    edges: Sequence[MessageEdge],
+    mode: str,
+) -> list[MessageEdge]:
+    if mode == "none" or not edges:
+        return list(edges)
+    weights = np.asarray([edge.weight for edge in edges], dtype=np.float32)
+    if mode == "mean":
+        scale = float(weights.mean())
+    elif mode == "max":
+        scale = float(weights.max())
+    else:
+        raise ValueError(
+            "edge_weight_normalization must be one of: none, mean, max; "
+            f"got {mode!r}"
+        )
+    if scale <= 0 or not np.isfinite(scale):
+        return list(edges)
+    return [
+        MessageEdge(
+            source_idx=edge.source_idx,
+            target_idx=edge.target_idx,
+            block_idx=edge.block_idx,
+            weight=float(edge.weight / scale),
+        )
+        for edge in edges
+    ]
+
+
 def _add_same_lag_edges(
     first_feature: str,
     second_feature: str,
@@ -661,6 +769,7 @@ def _add_same_lag_edges(
     key_index: dict[EdgeKey, int],
     edges: list[MessageEdge],
     seen: set[tuple[int, int, int]],
+    weight: float,
 ) -> None:
     for target_feature, source_feature in (
         (first_feature, second_feature),
@@ -676,7 +785,7 @@ def _add_same_lag_edges(
             source_idx = node_index.get((source_feature, lag))
             if target_idx is None or source_idx is None:
                 continue
-            _append_edge(edges, seen, source_idx, target_idx, block_idx)
+            _append_edge(edges, seen, source_idx, target_idx, block_idx, weight)
 
 
 def _add_temporal_edges(
@@ -689,6 +798,7 @@ def _add_temporal_edges(
     key_index: dict[EdgeKey, int],
     edges: list[MessageEdge],
     seen: set[tuple[int, int, int]],
+    weight: float,
 ) -> None:
     block_idx = _edge_key_index(
         (target_feature, source_feature, lag_distance),
@@ -701,7 +811,7 @@ def _add_temporal_edges(
         source_idx = node_index.get((source_feature, source_lag))
         if target_idx is None or source_idx is None:
             continue
-        _append_edge(edges, seen, source_idx, target_idx, block_idx)
+        _append_edge(edges, seen, source_idx, target_idx, block_idx, weight)
 
 
 def _edge_key_index(
@@ -721,6 +831,7 @@ def _append_edge(
     source_idx: int,
     target_idx: int,
     block_idx: int,
+    weight: float = 1.0,
 ) -> None:
     identity = (source_idx, target_idx, block_idx)
     if identity in seen:
@@ -731,6 +842,7 @@ def _append_edge(
             source_idx=source_idx,
             target_idx=target_idx,
             block_idx=block_idx,
+            weight=float(weight),
         )
     )
 
@@ -746,14 +858,16 @@ def _temporal_target_source(
 
 def _edge_tensors(
     edges: Sequence[MessageEdge],
-) -> tuple[Tensor, Tensor, Tensor]:
+) -> tuple[Tensor, Tensor, Tensor, Tensor]:
     if not edges:
         empty = torch.empty(0, dtype=torch.long)
-        return empty, empty, empty
+        empty_weight = torch.empty(0, dtype=torch.float32)
+        return empty, empty, empty, empty_weight
     return (
         torch.tensor([edge.source_idx for edge in edges], dtype=torch.long),
         torch.tensor([edge.target_idx for edge in edges], dtype=torch.long),
         torch.tensor([edge.block_idx for edge in edges], dtype=torch.long),
+        torch.tensor([edge.weight for edge in edges], dtype=torch.float32),
     )
 
 

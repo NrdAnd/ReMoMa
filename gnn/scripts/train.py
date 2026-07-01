@@ -212,6 +212,15 @@ def main(config_path: str, overrides: dict | None = None) -> None:
             f"{model.recurrent_temporal_edge_count:,} | same-lag edges: "
             f"{model.recurrent_same_lag_edge_count:,}"
         )
+        print(
+            "  Edge weights: "
+            f"{getattr(model, 'use_edge_weights', False)}"
+            + (
+                f" ({getattr(model, 'edge_weight_normalization', 'none')})"
+                if getattr(model, "use_edge_weights", False)
+                else ""
+            )
+        )
 
     class_weights = None
     if cfg["training"].get("use_class_weights", True):

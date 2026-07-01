@@ -41,6 +41,11 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--max-lag", type=int, default=100)
     parser.add_argument("--n-levels", type=int, default=10)
+    parser.add_argument(
+        "--weighted",
+        action="store_true",
+        help="Keep selected NMI/TMFG edge weights instead of binarizing to 0/1.",
+    )
     return parser.parse_args()
 
 
@@ -114,19 +119,32 @@ def main() -> None:
         f"{filtered.shape[0]} nodes | lags=0..{args.max_lag} | levels={args.n_levels}"
     )
     tmfg = TMFG()
+    output_mode = (
+        OutputMode.WEIGHTED_SPARSE_W_MATRIX
+        if args.weighted
+        else OutputMode.UNWEIGHTED_SPARSE_W_MATRIX
+    )
     _, _, adjacency = tmfg.fit_transform(
         filtered,
-        output=OutputMode.UNWEIGHTED_SPARSE_W_MATRIX.value,
+        output=output_mode.value,
     )
 
     adj_df = pd.DataFrame(adjacency, index=target_labels, columns=target_labels)
-    adj_df = (adj_df != 0).astype(int)
+    if not args.weighted:
+        adj_df = (adj_df != 0).astype(int)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     adj_df.to_csv(output_path, sep="\t")
 
     directed_edges = int(adj_df.to_numpy().sum())
     print(f"Saved: {output_path}")
-    print(f"Shape: {adj_df.shape} | directed nonzero entries: {directed_edges:,}")
+    if args.weighted:
+        nonzero = int((adj_df.to_numpy() != 0).sum())
+        print(
+            f"Shape: {adj_df.shape} | directed nonzero entries: {nonzero:,} | "
+            "weighted=true"
+        )
+    else:
+        print(f"Shape: {adj_df.shape} | directed nonzero entries: {directed_edges:,}")
 
 
 if __name__ == "__main__":

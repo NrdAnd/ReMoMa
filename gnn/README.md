@@ -157,6 +157,161 @@ python scripts/preprocess_dataset.py --config config/recurrent_sparse_sthnn_by_f
 python scripts/train.py --config config/recurrent_sparse_sthnn_by_file.yaml
 ```
 
+The first feature-engineering variant keeps the same lag100 NMI/TMFG graph and
+target definition, but adds causal per-node channels derived only from the
+historical LOB window: spread, level imbalance, total depth imbalance,
+microprice, and side indicator. It writes to a separate processed directory and
+checkpoint directory, so it does not overwrite the canonical run:
+
+```bash
+python scripts/preprocess_dataset.py --config config/recurrent_sparse_sthnn_feature_rich.yaml
+python scripts/train.py --config config/recurrent_sparse_sthnn_feature_rich.yaml
+python scripts/tune_threshold.py \
+  --checkpoint checkpoints/recurrent_sparse_sthnn_nmi_mean_feature_rich/best.pt \
+  --config config/recurrent_sparse_sthnn_feature_rich.yaml
+python scripts/evaluate.py \
+  --checkpoint checkpoints/recurrent_sparse_sthnn_nmi_mean_feature_rich/best.pt \
+  --config config/recurrent_sparse_sthnn_feature_rich.yaml \
+  --thresholds checkpoints/recurrent_sparse_sthnn_nmi_mean_feature_rich/thresholds.json
+```
+
+To test the next roadmap block in one controlled experiment, build a weighted
+TMFG adjacency, add order-flow channels from LOBSTER message files, and run the
+combined config:
+
+```bash
+python scripts/build_recurrent_tmfg_adjacency.py \
+  --weighted \
+  --output data/adjacency/recurrent_sparse_tmfg_lag100_bins2000_from_nmi_mean_weighted.tsv
+
+python scripts/preprocess_dataset.py --config config/recurrent_sparse_sthnn_feature_rich_orderflow_weighted.yaml
+python scripts/train.py --config config/recurrent_sparse_sthnn_feature_rich_orderflow_weighted.yaml
+python scripts/tune_threshold.py \
+  --checkpoint checkpoints/recurrent_sparse_sthnn_nmi_mean_feature_rich_orderflow_weighted/best.pt \
+  --config config/recurrent_sparse_sthnn_feature_rich_orderflow_weighted.yaml \
+  --objective macro_f1_penalized \
+  --flat-fp-penalty 0.25 \
+  --save-thresholds checkpoints/recurrent_sparse_sthnn_nmi_mean_feature_rich_orderflow_weighted/thresholds_penalized.json
+python scripts/evaluate.py \
+  --checkpoint checkpoints/recurrent_sparse_sthnn_nmi_mean_feature_rich_orderflow_weighted/best.pt \
+  --config config/recurrent_sparse_sthnn_feature_rich_orderflow_weighted.yaml \
+  --thresholds checkpoints/recurrent_sparse_sthnn_nmi_mean_feature_rich_orderflow_weighted/thresholds_penalized.json
+```
+
+For expanding walk-forward validation, generate and optionally run by-file
+folds from the same base config. With five Cisco days and the default
+`--min-train-files 2`, this creates two folds:
+`train=[0,1], val=[2], test=[3]` and
+`train=[0,1,2], val=[3], test=[4]`.
+
+```bash
+python scripts/run_walk_forward.py \
+  --base-config config/recurrent_sparse_sthnn_feature_rich_orderflow_weighted.yaml \
+  --name feature_rich_orderflow_weighted \
+  --run \
+  --objective macro_f1_penalized \
+  --flat-fp-penalty 0.25
+```
+
+To isolate whether order-flow channels and weighted edges are actually helping,
+run the same walk-forward protocol with the feature-rich unweighted baseline.
+This uses separate processed/checkpoint roots and will not overwrite the
+order-flow weighted run:
+
+```bash
+python scripts/run_walk_forward.py \
+  --base-config config/recurrent_sparse_sthnn_feature_rich_unweighted_walkforward.yaml \
+  --name feature_rich_unweighted \
+  --run \
+  --objective macro_f1_penalized \
+  --flat-fp-penalty 0.25
+```
+
+Step 4 runs a small walk-forward hyperparameter grid on the current strongest
+setup. By default it evaluates:
+
+```text
+hidden_dim: 8, 16
+readout_dropout: 0.15, 0.20, 0.25
+message_iterations: 1, 2
+```
+
+Each combination gets separate processed/checkpoint folders and a separate
+walk-forward name, so existing best checkpoints are not overwritten:
+
+```bash
+python scripts/run_hparam_grid.py \
+  --base-config config/recurrent_sparse_sthnn_feature_rich_orderflow_weighted.yaml \
+  --name feature_rich_orderflow_weighted_grid \
+  --run \
+  --skip-existing \
+  --objective macro_f1_penalized \
+  --flat-fp-penalty 0.25
+```
+
+The aggregate summaries are written to:
+
+```text
+config/hparam_grid/feature_rich_orderflow_weighted_grid/fold_results.csv
+config/hparam_grid/feature_rich_orderflow_weighted_grid/combo_summary.csv
+```
+
+Step 5 stabilizes the decision thresholds across validation folds. For the
+current best grid combination (`hd16_do20_mi1`), this averages the fold-specific
+validation thresholds, applies the same stable threshold pair to every fold test
+split, and writes new reports without touching the trained checkpoints:
+
+```bash
+python scripts/run_stable_thresholds.py \
+  --fold-results config/hparam_grid/feature_rich_orderflow_weighted_grid/fold_results.json \
+  --combo hd16_do20_mi1 \
+  --method mean \
+  --output-dir config/stable_thresholds/feature_rich_orderflow_weighted_grid_hd16_do20_mi1_mean
+```
+
+The stable-threshold outputs are written to:
+
+```text
+config/stable_thresholds/feature_rich_orderflow_weighted_grid_hd16_do20_mi1_mean/stable_thresholds.json
+config/stable_thresholds/feature_rich_orderflow_weighted_grid_hd16_do20_mi1_mean/fold_results.csv
+config/stable_thresholds/feature_rich_orderflow_weighted_grid_hd16_do20_mi1_mean/summary.json
+```
+
+Step 6 builds the final stable ensemble only from the best stable model family.
+It does not ensemble different temporal folds against each other. Instead, for
+each walk-forward fold it trains extra random seeds of the same best model,
+averages their probabilities with the original fold checkpoint, tunes ensemble
+thresholds on each validation fold, then evaluates one stable threshold pair
+across folds:
+
+```bash
+python scripts/run_walk_forward_ensemble.py \
+  --fold-results config/hparam_grid/feature_rich_orderflow_weighted_grid/fold_results.json \
+  --combo hd16_do20_mi1 \
+  --seeds 123 777 \
+  --include-base \
+  --run-train \
+  --skip-existing \
+  --objective macro_f1_penalized \
+  --flat-fp-penalty 0.25 \
+  --stable-method mean \
+  --output-dir config/ensembles/feature_rich_orderflow_weighted_grid_hd16_do20_mi1_seed_ensemble
+```
+
+This creates new seed checkpoint directories such as:
+
+```text
+checkpoints/recurrent_sparse_sthnn_nmi_mean_feature_rich_orderflow_weighted_hd16_do20_mi1_fold_01_seed123/
+checkpoints/recurrent_sparse_sthnn_nmi_mean_feature_rich_orderflow_weighted_hd16_do20_mi1_fold_01_seed777/
+```
+
+and writes ensemble summaries to:
+
+```text
+config/ensembles/feature_rich_orderflow_weighted_grid_hd16_do20_mi1_seed_ensemble/fold_results.csv
+config/ensembles/feature_rich_orderflow_weighted_grid_hd16_do20_mi1_seed_ensemble/summary.json
+```
+
 Its adjacency must be a labeled CSV/TSV matrix whose index and columns match
 labels such as `ASKs1_lag100`. The model internally reorders the existing
 processed LOB tensor order to match that adjacency order.
