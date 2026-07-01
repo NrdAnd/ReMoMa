@@ -229,7 +229,14 @@ torch.einsum(&quot;bed,eod-&gt;beo&quot;, source_hidden, edge_blocks)</code></pr
 
 message_iterations = 1</code></pre>
 
-<p>Therefore, each forward pass performs one full recurrent sparse message update before readout.</p>
+<p><code>message_iterations</code> controls how many complete message-passing/update cycles are performed before the final readout. With <code>message_iterations = 1</code>, each node receives messages from its connected neighbors once, combines them, updates its hidden state with the GRUCell, and then the model classifies the sample. With <code>message_iterations = 2</code>, the same process is repeated a second time using the already-updated hidden states.</p>
+<pre><code>message_iterations = 1:
+  initial node states -&gt; messages -&gt; GRU update -&gt; readout
+
+message_iterations = 2:
+  initial node states -&gt; messages -&gt; GRU update
+                      -&gt; messages -&gt; GRU update -&gt; readout</code></pre>
+<p>Therefore, each forward pass in the final recommended model performs one full recurrent sparse message update before readout. In the hyperparameter grid, <code>message_iterations = 2</code> did not improve the final balance of metrics, suggesting that one sparse information-propagation step was sufficient for this graph and dataset.</p>
 <h3>2.6 Readout</h3>
 <p>The readout mode used in all experiments is:</p>
 
@@ -653,7 +660,68 @@ order-flow features:
   order_cancel_flow
 
 node_feature_dim = 10</code></pre>
-<p>The order-flow features are derived from the corresponding LOBSTER message files. They are historical/causal features attached to the same lagged window; they do not use future labels or future price movement.</p>
+<p>The two base channels, <code>price</code> and <code>volume</code>, remain the structural description of each LOB node. The added channels make the node representation more informative: instead of showing only the price/volume snapshot, the model also receives liquidity, imbalance, side identity, and recent event-flow information.</p>
+
+<table>
+<thead><tr>
+<th>Feature</th>
+<th>How it is computed in the preprocessing</th>
+<th>What it captures</th>
+<th>Why it was added</th>
+</tr></thead><tbody>
+<tr>
+<td><code>spread</code></td>
+<td>Best ask minus best bid, normalized by the current mid-price, for each lag.</td>
+<td>Instantaneous trading cost and book tightness.</td>
+<td>A narrow spread usually indicates a liquid and stable book, while a wider spread often indicates uncertainty, lower liquidity, or higher adverse-selection risk. This helps the model distinguish strong directional signals from noisy ones.</td>
+</tr>
+<tr>
+<td><code>level_imbalance</code></td>
+<td><code>(bid_volume_level - ask_volume_level) / (bid_volume_level + ask_volume_level)</code> at each level and lag.</td>
+<td>Local supply/demand pressure at each depth level.</td>
+<td>If bid volume dominates ask volume, the book may contain stronger buy-side support; if ask volume dominates, sell-side pressure may be stronger. This gives the model a direct microstructure signal instead of forcing it to infer imbalance indirectly from raw volumes.</td>
+</tr>
+<tr>
+<td><code>depth_imbalance</code></td>
+<td><code>(total_bid_depth - total_ask_depth) / (total_bid_depth + total_ask_depth)</code> across the 10 visible levels, for each lag.</td>
+<td>Aggregate book pressure over the full visible depth.</td>
+<td>Single-level imbalance can be noisy. Depth imbalance summarizes whether the whole visible book is skewed toward buy or sell liquidity, giving the model a more stable context signal.</td>
+</tr>
+<tr>
+<td><code>microprice</code></td>
+<td>Volume-weighted best-quote price, then normalized as <code>(microprice - current_mid) / current_mid</code>.</td>
+<td>Imbalance-adjusted fair price near the top of the book.</td>
+<td>The mid-price treats bid and ask symmetrically, but the microprice moves toward the side with stronger queue support. It can anticipate short-term pressure when the best bid/ask volumes are asymmetric.</td>
+</tr>
+<tr>
+<td><code>side</code></td>
+<td>Constant side marker: ask nodes receive <code>-1</code>, bid nodes receive <code>+1</code>.</td>
+<td>Explicit ask/bid identity of each node.</td>
+<td>Ask-side and bid-side variables have different economic meanings. This feature lets the model recognize the side explicitly instead of relying only on node ordering.</td>
+</tr>
+<tr>
+<td><code>order_trade_flow</code></td>
+<td>From LOBSTER message rows with execution event types 4/5. Signed volume follows a buy-positive convention and is normalized by visible depth, then clipped to a bounded range.</td>
+<td>Aggressive trading pressure that consumes liquidity.</td>
+<td>Trades tell us whether liquidity is being actively hit. This is different from just observing the book state: two books can look similar, but one may be under active buy pressure while another is under active sell pressure.</td>
+</tr>
+<tr>
+<td><code>order_limit_flow</code></td>
+<td>From LOBSTER message rows with new limit-order event type 1. Signed volume is buy-positive, normalized by visible depth, then clipped.</td>
+<td>Fresh liquidity being added to the book.</td>
+<td>New limit orders show where market participants are adding support or resistance. This helps distinguish a book that is passively balanced from one where new liquidity is entering on one side.</td>
+</tr>
+<tr>
+<td><code>order_cancel_flow</code></td>
+<td>From LOBSTER message rows with cancellation/deletion event types 2/3. Signed removed volume is buy-positive after applying the preprocessing convention, normalized by visible depth, then clipped.</td>
+<td>Liquidity being removed from the book.</td>
+<td>Cancellations can be as informative as new orders. If liquidity disappears from one side, the apparent support/resistance of the book can weaken before the price visibly moves.</td>
+</tr>
+</tbody></table>
+
+<p>The three order-flow features are derived from the corresponding LOBSTER message files. In the implementation, the sign convention is <strong>buy-positive</strong>: positive values indicate buy-side pressure and negative values indicate sell-side pressure. They are attached to the same historical lagged window as the book features; they do not use future labels or future price movement.</p>
+<div class="callout warn"><strong>No leakage:</strong> all added features are computed at the current timestamp and its past lags only. The target still depends on the future mid-price movement over the prediction horizon, but the input features do not include that future movement.</div>
+<p>Conceptually, these features were added because price and volume alone describe what the book looks like, while the engineered channels describe how liquid the book is, where pressure is concentrated, which side each node belongs to, and what type of market activity is changing the book. This is why the feature-rich setup is a richer but still causal input representation.</p>
 
 <h3>11.2 Weighted NMI/TMFG Graph</h3>
 <p>The graph is still built from the Cisco NMI-mean matrix. The final weighted adjacency used by the best experiments is:</p>
@@ -676,6 +744,13 @@ fold_02:
   train = files [0, 1, 2]
   val   = file  [3]
   test  = file  [4]</code></pre>
+<p>This is an <strong>expanding-window</strong> walk-forward setup. In fold 1, only the first two days are treated as historical training data. In fold 2, time has moved forward: file 2 is no longer future information, so it becomes part of the historical training set. The validation and test files also move one step forward.</p>
+<pre><code>file 0   file 1   file 2   file 3   file 4
+day 1    day 2    day 3    day 4    day 5
+
+fold 1:  train    train    val      test
+fold 2:  train    train    train    val      test</code></pre>
+<p>The rule is always chronological: training uses only past files, validation uses the next unseen file, and test uses the following unseen file. Therefore, the model is evaluated as if it were trained on available historical data and then deployed on future days.</p>
 <p>This is stricter than by_lag because validation and test are full unseen days. It is also more informative than a single by_file split because it measures the same model family across multiple chronological validation/test windows.</p>
 </section>
 
@@ -1231,7 +1306,7 @@ up   &gt;= 0.82</code></pre>
 <td>stable penalized</td>
 <td>0.8636</td>
 <td>0.6103</td>
-<td>n/a</td>
+<td>not logged</td>
 <td>0.4288</td>
 <td>0.4833</td>
 <td>0.0858</td>
@@ -1241,7 +1316,7 @@ up   &gt;= 0.82</code></pre>
 <td>pre-grid walk-forward</td>
 <td>0.8753</td>
 <td>0.6153</td>
-<td>n/a</td>
+<td>not logged</td>
 <td>0.4651</td>
 <td>0.4526</td>
 <td>0.0685</td>
@@ -1271,7 +1346,7 @@ up   &gt;= 0.82</code></pre>
 <td>penalty 0.25 stable</td>
 <td>0.8732</td>
 <td>0.6279</td>
-<td>n/a</td>
+<td>not logged</td>
 <td>0.4624</td>
 <td>0.4976</td>
 <td>0.0765</td>
@@ -1281,7 +1356,7 @@ up   &gt;= 0.82</code></pre>
 <td>penalty 0.50 stable</td>
 <td>0.8819</td>
 <td>0.6189</td>
-<td>n/a</td>
+<td>not logged</td>
 <td>0.4967</td>
 <td>0.4340</td>
 <td>0.0582</td>
