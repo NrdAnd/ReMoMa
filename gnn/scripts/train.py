@@ -7,8 +7,10 @@ Usage:
 """
 
 import argparse
+import csv
 import random
 import sys
+import time
 from pathlib import Path
 
 import numpy as np
@@ -27,7 +29,7 @@ from src.dataset.preprocessing import (
 )
 from src.graph.adjacency import load_tmfg_edge_index
 from src.models import build_model
-from src.training.metrics import compute_metrics, print_report
+from src.training.metrics import compute_metrics, format_report
 from src.training.trainer import Trainer
 
 
@@ -94,6 +96,33 @@ def build_class_weights_from_y(y_path: str | Path, device: torch.device) -> torc
     return torch.tensor(weights, dtype=torch.float32, device=device)
 
 
+SUMMARY_HEADER = [
+    "timestamp", "model", "split", "rule", "f1_macro", "mcc", "accuracy",
+    "f1_weighted", "f1_down", "f1_flat", "f1_up", "thr_down", "thr_up", "params",
+]
+
+
+def _summary_row(stamp, model, split, rule, m, td, tu, params):
+    fc = m.get("f1_per_class", [0.0, 0.0, 0.0])
+    thr_d = "" if td == "" else f"{td:.2f}"
+    thr_u = "" if tu == "" else f"{tu:.2f}"
+    return [
+        stamp, model, split, rule,
+        f"{m['f1_macro']:.4f}", f"{m['mcc']:.4f}", f"{m['accuracy']:.4f}",
+        f"{m['f1_weighted']:.4f}", f"{fc[0]:.4f}", f"{fc[1]:.4f}", f"{fc[2]:.4f}",
+        thr_d, thr_u, params,
+    ]
+
+
+def _append_summary(path: Path, rows: list[list]) -> None:
+    exists = path.exists()
+    with open(path, "a", newline="") as f:
+        w = csv.writer(f)
+        if not exists:
+            w.writerow(SUMMARY_HEADER)
+        w.writerows(rows)
+
+
 def main(config_path: str, overrides: dict | None = None) -> None:
     with open(config_path) as f:
         cfg = yaml.safe_load(f)
@@ -110,6 +139,8 @@ def main(config_path: str, overrides: dict | None = None) -> None:
         cfg["training"]["lr"] = float(overrides["lr"])
     if overrides.get("epochs") is not None:
         cfg["training"]["epochs"] = int(overrides["epochs"])
+    if overrides.get("split") is not None:
+        cfg["data"]["split_strategy"] = overrides["split"]
     applied = {k: v for k, v in overrides.items() if v is not None and k != "config"}
     if applied:
         print(f"CLI overrides: {applied}\n")
@@ -229,6 +260,19 @@ def main(config_path: str, overrides: dict | None = None) -> None:
     print("\n[5/5] Evaluating best checkpoint on test split...")
     trainer.load_best()
 
+    results_dir = Path("results")
+    results_dir.mkdir(exist_ok=True)
+    split = data_cfg["split_strategy"]
+    model_name = cfg["model"]["type"].lower()
+    n_params = model.count_parameters()
+    stamp = time.strftime("%Y%m%d_%H%M%S")
+
+    lines = [
+        "── Test Results ─────────────────────────────────────",
+        f"  Model: {model_name} | Split: {split} | Params: {n_params:,}",
+    ]
+    summary_rows: list[list] = []
+
     if cfg["training"].get("tune_threshold", False):
         from src.training.threshold import apply_thresholds, tune_thresholds
 
@@ -241,22 +285,33 @@ def main(config_path: str, overrides: dict | None = None) -> None:
         m_arg = compute_metrics(argmax_preds, test_labels)
         m_tuned = compute_metrics(tuned_preds, test_labels)
 
-        print("\n── Test Results ─────────────────────────────────────")
-        print(f"  F1 Macro (argmax): {m_arg['f1_macro']:.4f}")
-        print(f"  F1 Macro (tuned):  {m_tuned['f1_macro']:.4f}   "
-              f"(down>={td:.2f} up>={tu:.2f} | val_f1={val_f1:.3f})")
-        print(f"  Accuracy (tuned):  {m_tuned['accuracy']:.4f}")
-        print()
-        print_report(tuned_preds, test_labels)
+        lines.append(f"  F1 Macro (argmax): {m_arg['f1_macro']:.4f}   MCC (argmax): {m_arg['mcc']:.4f}")
+        lines.append(f"  F1 Macro (tuned):  {m_tuned['f1_macro']:.4f}   MCC (tuned):  {m_tuned['mcc']:.4f}   "
+                     f"(down>={td:.2f} up>={tu:.2f} | val_f1={val_f1:.3f})")
+        lines.append(f"  Accuracy (tuned):  {m_tuned['accuracy']:.4f}")
+        lines.append("")
+        lines.append(format_report(tuned_preds, test_labels))
+        summary_rows.append(_summary_row(stamp, model_name, split, "argmax", m_arg, "", "", n_params))
+        summary_rows.append(_summary_row(stamp, model_name, split, "tuned", m_tuned, td, tu, n_params))
     else:
         preds, labels = trainer.predict(test_loader)
         metrics = compute_metrics(preds, labels)
-        print("\n── Test Results ─────────────────────────────────────")
-        print(f"  Accuracy:    {metrics['accuracy']:.4f}")
-        print(f"  F1 Macro:    {metrics['f1_macro']:.4f}")
-        print(f"  F1 Weighted: {metrics['f1_weighted']:.4f}")
-        print()
-        print_report(preds, labels)
+        lines.append(f"  Accuracy:    {metrics['accuracy']:.4f}")
+        lines.append(f"  F1 Macro:    {metrics['f1_macro']:.4f}")
+        lines.append(f"  F1 Weighted: {metrics['f1_weighted']:.4f}")
+        lines.append(f"  MCC:         {metrics['mcc']:.4f}")
+        lines.append("")
+        lines.append(format_report(preds, labels))
+        summary_rows.append(_summary_row(stamp, model_name, split, "argmax", metrics, "", "", n_params))
+
+    report_text = "\n".join(lines)
+    print("\n" + report_text)
+
+    txt_path = results_dir / f"{model_name}_{split}_{stamp}.txt"
+    txt_path.write_text(report_text + "\n")
+    _append_summary(results_dir / "summary.csv", summary_rows)
+    print(f"\n[saved] full report → {txt_path}")
+    print(f"[saved] summary → {results_dir / 'summary.csv'}")
 
 
 if __name__ == "__main__":
@@ -270,5 +325,7 @@ if __name__ == "__main__":
                         help="override training.lr")
     parser.add_argument("--epochs", type=int, default=None,
                         help="override training.epochs")
+    parser.add_argument("--split", choices=["by_lag", "by_file"], default=None,
+                        help="override data.split_strategy (es. by_file per split onesto)")
     args = parser.parse_args()
     main(args.config, vars(args))
