@@ -1,0 +1,20 @@
+── Test Results ─────────────────────────────────────
+  Model: gcn | Split: by_file | Params: 205,651
+  F1 Macro (argmax): 0.4757   MCC (argmax): 0.3107
+  F1 Macro (tuned):  0.5715   MCC (tuned):  0.3427   (down>=0.75 up>=0.77 | val_f1=0.568)
+  Accuracy (tuned):  0.8360
+
+              precision    recall  f1-score   support
+
+        down     0.4096    0.3855    0.3972      3219
+        flat     0.9215    0.8892    0.9051     43856
+          up     0.3358    0.5340    0.4123      2925
+
+    accuracy                         0.8360     50000
+   macro avg     0.5556    0.6029    0.5715     50000
+weighted avg     0.8543    0.8360    0.8436     50000
+
+Confusion Matrix:
+[[ 1241  1960    18]
+ [ 1786 38998  3072]
+ [    3  1360  1562]]

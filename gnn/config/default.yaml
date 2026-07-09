@@ -50,6 +50,11 @@ model:
       cnn_channels: 64
       cnn_kernel: 5
       use_bin: false        # Bilinear Normalization: provata, peggiora (0.628→0.569) — disattivata
+    cgnn_sage:              # come cgnn ma con SAGEConv (l'operatore migliore su by_file: 0.609 vs 0.572)
+      hidden_channels: 140  # ~185k parametri (SAGEConv ha 2 matrici/layer: self + neighbor)
+      cnn_channels: 64
+      cnn_kernel: 5
+      use_bin: false
     stgcn:                  # blocchi [temporale → grafo → temporale] alternati
       hidden_channels: 110  # ~183k parametri
       num_layers: 2         # numero di ST-blocchi

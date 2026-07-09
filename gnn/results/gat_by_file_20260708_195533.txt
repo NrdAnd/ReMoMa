@@ -1,0 +1,20 @@
+── Test Results ─────────────────────────────────────
+  Model: gat | Split: by_file | Params: 188,355
+  F1 Macro (argmax): 0.5874   MCC (argmax): 0.3794
+  F1 Macro (tuned):  0.5841   MCC (tuned):  0.3710   (down>=0.63 up>=0.39 | val_f1=0.571)
+  Accuracy (tuned):  0.8246
+
+              precision    recall  f1-score   support
+
+        down     0.4121    0.4654    0.4371      3219
+        flat     0.9317    0.8651    0.8971     43856
+          up     0.3174    0.6123    0.4181      2925
+
+    accuracy                         0.8246     50000
+   macro avg     0.5537    0.6476    0.5841     50000
+weighted avg     0.8623    0.8246    0.8395     50000
+
+Confusion Matrix:
+[[ 1498  1657    64]
+ [ 2129 37940  3787]
+ [    8  1126  1791]]

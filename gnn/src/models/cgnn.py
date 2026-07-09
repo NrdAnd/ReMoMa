@@ -3,7 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch import Tensor
 from torch_geometric.data import Data
-from torch_geometric.nn import GCNConv, global_max_pool, global_mean_pool
+from torch_geometric.nn import GCNConv, SAGEConv, global_max_pool, global_mean_pool
 
 from src.models.base import GNNClassifier
 from src.models.bin import BiN
@@ -42,6 +42,7 @@ class CGNN(GNNClassifier):
         cnn_channels: int = 64,
         cnn_kernel: int = 5,
         use_bin: bool = False,
+        conv_type: str = "gcn",
         **_kwargs,
     ):
         super().__init__()
@@ -68,8 +69,11 @@ class CGNN(GNNClassifier):
         )
 
         # ── Spatial GNN over the TMFG graph ──
+        # conv_type 'sage' ha 2 matrici/layer (self + neighbor) → a parità di
+        # budget parametri serve un hidden più basso (vedi preset cgnn_sage).
+        conv_cls = {"gcn": GCNConv, "sage": SAGEConv}[conv_type]
         dims = [hidden_channels] * (num_layers + 1)
-        self.convs = nn.ModuleList(GCNConv(dims[i], dims[i + 1]) for i in range(num_layers))
+        self.convs = nn.ModuleList(conv_cls(dims[i], dims[i + 1]) for i in range(num_layers))
         self.norms = nn.ModuleList(nn.LayerNorm(hidden_channels) for _ in range(num_layers))
         self.head = nn.Sequential(
             nn.Linear(2 * hidden_channels, hidden_channels // 2),

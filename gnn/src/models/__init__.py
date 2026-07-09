@@ -1,3 +1,5 @@
+from functools import partial
+
 from src.models.base import GNNClassifier
 from src.models.gcn import GCN
 from src.models.gat import GAT
@@ -5,7 +7,14 @@ from src.models.sage import GraphSAGE
 from src.models.cgnn import CGNN
 from src.models.stgcn import STGCN
 
-_REGISTRY = {"gcn": GCN, "gat": GAT, "sage": GraphSAGE, "cgnn": CGNN, "stgcn": STGCN}
+_REGISTRY = {
+    "gcn": GCN,
+    "gat": GAT,
+    "sage": GraphSAGE,
+    "cgnn": CGNN,
+    "cgnn_sage": partial(CGNN, conv_type="sage"),
+    "stgcn": STGCN,
+}
 
 
 def build_model(cfg: dict) -> GNNClassifier:
