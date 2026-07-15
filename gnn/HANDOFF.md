@@ -10,7 +10,7 @@
 - Il nostro task ha **le stesse identiche label** del paper **HLOB** (Briola–Bartolucci–Aste): differenza mid-price punto-a-punto, soglia 1 tick, orizzonte 50 (verificato su Eq. 2 del PDF). Quindi il confronto è **legittimo**.
 - **HLOB su CSCO @ orizzonte 50: F1 ≈ 0.60, MCC ≈ 0.40, p_T ≈ 0.16** (il migliore di 10 modelli SOTA; l'intero campo si ferma lì). ⚠️ La prima versione di questo documento riportava **MCC 0.47: era la riga BAC** della Tabella 5, letta per errore (HLOB su BAC: 0.62/0.47/0.09).
 - **Tutti e 6 i modelli sono stati misurati su `by_file`** (2026-07-08/15, `results/summary.csv`). I due modelli **spazio-temporali superano HLOB** su entrambe le metriche: **CGNN 0.625 / 0.421 (tuned)**, **STGCN 0.620 / 0.417**, contro HLOB **0.60 / 0.40**. Le GNN statiche eguagliano (SAGE 0.609/0.398). ⚠️ Caveat forti: **singolo seed** e **un solo giorno di test** (5 giorni ⇒ 1 held-out), contro media HLOB su 10gg × 3 anni.
-- ⚠️ **Cambio di conclusione rispetto alla v1 di questo doc**: prima dicevo "SAGE è il campione, parità con HLOB, la CNN temporale non aiuta". I run CGNN/STGCN by_file lo ribaltano: **l'ingrediente decisivo è la dimensione temporale**, non l'operatore di grafo. GCN 0.572 → CGNN 0.625 (+0.053); ma SAGE 0.609 → CGNN-SAGE 0.601 (−0.008). La CNN temporale aiuta l'operatore debole (GCN), non quello forte (SAGE).
+- ⚠️ **Cambio di conclusione rispetto alla v1 di questo doc**: prima dicevo "SAGE è il campione, parità con HLOB". I run CGNN/STGCN by_file lo ribaltano: **l'ingrediente decisivo è la dimensione temporale**, non l'operatore di grafo. GCN 0.572 → CGNN 0.625 (+0.053). Per SAGE il quadro è più sottile (controllo di capacità, 2026-07-15): a budget CGNN-SAGE 0.601 (−0.008 vs SAGE), ma a capacità piena (hidden 175, 273k param) sale a **0.615** (+0.006). La CNN aiuta *entrambi* gli operatori; è solo cara in param, e SAGEConv (2 matrici/layer) non lascia budget per capacità piena. GCN economica → CNN+capacità entro budget → **CGNN 0.625@181k resta il migliore e il più efficiente**.
 - L'**MCC non è più un buco**: calcolato e auto-salvato per ogni run. Passo mancante ora prioritario: **varianza multi-seed su CGNN e STGCN** (i nuovi leader), ≥3 seed.
 - **Soffitto informativo ora stimato a ~0.62** (nessuno dei 6 supera 0.625; campo HLOB fermo a 0.60): la dimensione temporale porta *fino* al soffitto, non oltre.
 
@@ -79,12 +79,13 @@
 | **CGNN** (GCN+CNN) — tick | **by_file** | **0.6246** | **0.4213** | tuned; argmax 0.5379/0.3887; val_f1=0.633 → **best assoluto, sopra HLOB** (run 2026-07-15) |
 | **STGCN** — tick | **by_file** | **0.6195** | **0.4168** | tuned; argmax 0.5800/0.4058; val_f1=0.630 → 2°, sopra HLOB (run 2026-07-15) |
 | **SAGE** — tick | **by_file** | 0.6086 | 0.3976 | tuned; argmax 0.5445/0.3844 — best GNN statica, ≈ HLOB |
-| **CGNN-SAGE** — tick | **by_file** | 0.6008 | 0.3868 | tuned; argmax 0.5529/0.3803 — CNN temporale NON aiuta SAGE (−0.008) |
+| **CGNN-SAGE** (h140, budget) — tick | **by_file** | 0.6008 | 0.3868 | tuned; argmax 0.5529/0.3803 — a budget −0.008 vs SAGE (taglio capacità) |
+| **CGNN-SAGE** (h175, 273k) — tick | **by_file** | 0.6153 | 0.4078 | ⚠️ diagnostico, FUORI budget; a capacità piena BATTE SAGE (val 0.628) |
 | **GAT** — tick | **by_file** | 0.5841 | 0.3710 | tuned; argmax **0.5874**/0.3794 — qui il tuning *peggiora* leggermente |
 | **GCN** — tick | **by_file** | 0.5715 | 0.3427 | tuned; argmax 0.4757/0.3107 — peggiore da sola; +0.053 con la CNN (→CGNN) |
 
 - **by_lag → by_file trascurabile, ora confermato su 3 modelli**: STHNN 0.6172→0.6115 (report esterno); CGNN 0.628→0.6246; STGCN 0.623→0.6195. Calo ~0.004–0.006, coerente col soffitto (poco segnale da "rubare" con lo split ottimistico). Non più una stima solo-STHNN.
-- **La dimensione temporale è il fattore chiave** (vedi TL;DR): GCN 0.572 → CGNN 0.625; ma SAGE 0.609 → CGNN-SAGE 0.601. La CNN aiuta l'operatore debole, non quello forte. Miglior modello = **GCN + temporale**.
+- **La dimensione temporale è il fattore chiave** (vedi TL;DR): GCN 0.572 → CGNN 0.625. Per SAGE serve il controllo di capacità: a budget CGNN-SAGE 0.601, a hidden 175 sale a 0.615 e batte SAGE → la CNN aiuta entrambi gli operatori, è solo cara in param. Miglior modello a budget = **GCN + temporale** (0.625@181k).
 - Il tuning ha generalizzato (non è artefatto): val_f1 0.633 → test 0.625 (CGNN), 0.630 → 0.620 (STGCN); salto ~0.01. Eccezione GAT, dove il tuning *peggiora* (0.5874→0.5841).
 - STHNN by_file: Weighted F1 ~0.88, signal precision ~0.42–0.44, signal recall ~0.51–0.54.
 - Il "0.629" storico resta su label PCT (task diverso), non confrontabile.

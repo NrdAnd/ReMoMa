@@ -55,6 +55,21 @@ model:
       cnn_channels: 64
       cnn_kernel: 5
       use_bin: false
+    cgnn_gat:               # come cgnn ma con GATConv (attention); gira su path PyG (non static)
+      hidden_channels: 140  # ~186k parametri (GATConv concat=False, 2 head)
+      cnn_channels: 64
+      cnn_kernel: 5
+      num_heads: 2
+      use_bin: false
+    stgcn_sage:             # ST-block con SAGEConv al posto di GCNConv
+      hidden_channels: 103  # ~182k parametri
+      num_layers: 2
+      cnn_kernel: 3
+    stgcn_gat:              # ST-block con GATConv (attention); gira su path PyG (non static)
+      hidden_channels: 104  # ~186k parametri
+      num_layers: 2
+      cnn_kernel: 3
+      num_heads: 2
     stgcn:                  # blocchi [temporale → grafo → temporale] alternati
       hidden_channels: 110  # ~183k parametri
       num_layers: 2         # numero di ST-blocchi

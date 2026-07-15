@@ -81,6 +81,8 @@ Il modello praticamente **non confonde mai le due direzioni tra loro** (12 error
 
 **Coerenza col vecchio split esplorativo `by_lag`**: CGNN faceva 0.628 e STGCN 0.623; su `by_file` fanno 0.625 e 0.620. Il calo dovuto allo split onesto è ~0.004 — trascurabile, e in linea con lo STHNN (~0.006). I numeri sono internamente consistenti, non frutto del caso.
 
+> **Controllo di capacità su CGNN-SAGE** (diagnostico, fuori dal budget parametri): a hidden 175 (273k param, invece dei 140/185k a budget) CGNN-SAGE sale a **F1 0.615 / MCC 0.408** e batte SAGE puro. Conferma che il suo −0.008 a budget era il taglio di capacità, non l'inutilità della CNN (vedi §7.2). Non entra nella classifica sopra perché non è a parità di parametri.
+
 ## 6. Confronto con il benchmark HLOB
 
 Il paper HLOB valuta **10 architetture SOTA** (DeepLOB, transformer, TABL, ecc. + HLOB stesso) su 15 titoli × 3 anni (2017–2019; 40 giorni di train, 5 di validation, 10 di test per anno). Per **CSCO a orizzonte 50** (Tabella 5 del paper, valori verificati dal PDF):
@@ -105,11 +107,11 @@ Il paper HLOB valuta **10 architetture SOTA** (DeepLOB, transformer, TABL, ecc. 
 
 1. **La dimensione temporale esplicita è l'ingrediente decisivo.** I due modelli che aggiungono una convoluzione temporale sui lag prima/dentro il message passing (CGNN, STGCN) sono i migliori (~0.62); le tre GNN statiche (GCN, SAGE, GAT) restano a 0.57–0.61. La struttura a lag del grafo da sola non basta: serve un operatore che modelli esplicitamente l'evoluzione nel tempo.
 
-2. **La CNN temporale aiuta l'operatore debole, non quello forte.** Il confronto controllato lo mostra con chiarezza:
-   - GCN 0.572 → **CGNN 0.625** (+0.053): la CNN temporale trasforma l'operatore peggiore nel migliore.
-   - SAGE 0.609 → CGNN-SAGE 0.601 (−0.008): su un operatore già forte la stessa CNN non aggiunge nulla (anzi, avendo dovuto ridurre l'hidden per restare a budget, perde un filo di capacità).
+2. **La CNN temporale aiuta entrambi gli operatori, ma è cara in parametri.** Un confronto controllato (a capacità appaiata) lo chiarisce:
+   - GCN 0.572 → **CGNN 0.625** (+0.053): sulla GCN, operatore "economico", la CNN entra nel budget ~180k e trasforma il modello peggiore nel migliore.
+   - SAGE 0.609 → CGNN-SAGE **a budget** 0.601 (−0.008), ma → CGNN-SAGE **a capacità piena** (hidden 175, 273k param) **0.615** (+0.006): la CNN aggiunge segnale anche a SAGE — il calo a budget era dovuto al taglio dell'hidden a 140 (SAGEConv ha 2 matrici/layer, "costa" il doppio), non alla CNN.
    
-   Morale: da sole, SAGE > GCN (l'operatore conta); ma con la CNN temporale la GCN recupera e sorpassa. Il miglior modello è **GCN + temporale**, non una variante di SAGE.
+   Morale: la dimensione temporale porta segnale a qualunque operatore; la differenza è il *costo*. La GCN è abbastanza economica da permettersi CNN + capacità piena entro budget, SAGE no. Il miglior modello a parità di budget resta quindi **GCN + temporale** (0.625 con 181k param), più efficiente del CNN+SAGE anche quando quest'ultimo gira a 273k.
 
 3. **Esiste comunque un soffitto informativo, ora stimabile a ~0.62 di F1.** Nessuno dei sei modelli supera 0.625, e il campo di 10 modelli SOTA del paper si ferma a 0.60. Il collo di bottiglia resta il contenuto predittivo del LOB a questo orizzonte: la dimensione temporale porta i modelli *fino* al soffitto, non oltre.
 

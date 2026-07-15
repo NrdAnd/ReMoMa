@@ -4,6 +4,23 @@ import torch
 import torch.nn as nn
 from torch import Tensor
 from torch_geometric.data import Data
+from torch_geometric.nn import GATConv, GCNConv, SAGEConv
+
+
+def make_graph_conv(conv_type: str, in_dim: int, out_dim: int, num_heads: int = 2):
+    """Factory for the spatial graph operator used inside the (spatio-temporal) models.
+
+    Lets CGNN/STGCN swap operator via a single `conv_type` flag. GAT uses
+    concat=False so the output stays `out_dim` (heads are averaged), keeping the
+    residual/LayerNorm dimensions unchanged.
+    """
+    if conv_type == "gcn":
+        return GCNConv(in_dim, out_dim)
+    if conv_type == "sage":
+        return SAGEConv(in_dim, out_dim)
+    if conv_type == "gat":
+        return GATConv(in_dim, out_dim, heads=num_heads, concat=False)
+    raise ValueError(f"conv_type must be 'gcn'|'sage'|'gat', got '{conv_type}'")
 
 
 class GNNClassifier(nn.Module, ABC):

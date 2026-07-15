@@ -13,7 +13,10 @@ _REGISTRY = {
     "sage": GraphSAGE,
     "cgnn": CGNN,
     "cgnn_sage": partial(CGNN, conv_type="sage"),
+    "cgnn_gat": partial(CGNN, conv_type="gat"),
     "stgcn": STGCN,
+    "stgcn_sage": partial(STGCN, conv_type="sage"),
+    "stgcn_gat": partial(STGCN, conv_type="gat"),
 }
 
 

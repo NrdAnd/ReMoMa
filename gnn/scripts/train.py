@@ -177,7 +177,11 @@ def main(config_path: str, overrides: dict | None = None) -> None:
 
     static_graph_batching = bool(cfg["training"].get("static_graph_batching", False))
     model_type = cfg["model"]["type"].lower()
-    use_static_mode = static_graph_batching and model_type in ("gcn", "cgnn", "cgnn_sage", "stgcn")
+    # GAT-based spatio-temporal variants stay on the PyG path (GATConv's attention
+    # is not reliable with the [B,N,C] shared-graph static trick).
+    use_static_mode = static_graph_batching and model_type in (
+        "gcn", "cgnn", "cgnn_sage", "stgcn", "stgcn_sage",
+    )
     if static_graph_batching and not use_static_mode:
         print(
             f"[warn] static_graph_batching requested, but model.type='{model_type}' "
@@ -319,7 +323,10 @@ def main(config_path: str, overrides: dict | None = None) -> None:
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", default="config/default.yaml")
-    parser.add_argument("--model", choices=["gcn", "gat", "sage", "cgnn", "cgnn_sage", "stgcn"], default=None,
+    parser.add_argument("--model",
+                        choices=["gcn", "gat", "sage", "cgnn", "cgnn_sage", "cgnn_gat",
+                                 "stgcn", "stgcn_sage", "stgcn_gat"],
+                        default=None,
                         help="override model.type (es. stgcn)")
     parser.add_argument("--hidden", type=int, default=None,
                         help="override model.hidden_channels (es. 160 per SAGE)")

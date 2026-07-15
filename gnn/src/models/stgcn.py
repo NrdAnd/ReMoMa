@@ -3,9 +3,9 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch import Tensor
 from torch_geometric.data import Data
-from torch_geometric.nn import GCNConv, global_max_pool, global_mean_pool
+from torch_geometric.nn import global_max_pool, global_mean_pool
 
-from src.models.base import GNNClassifier
+from src.models.base import GNNClassifier, make_graph_conv
 
 
 class STGCN(GNNClassifier):
@@ -38,6 +38,8 @@ class STGCN(GNNClassifier):
         n_levels: int = 10,
         add_lag_feature: bool = False,
         cnn_kernel: int = 3,
+        conv_type: str = "gcn",
+        num_heads: int = 2,
         **_kwargs,
     ):
         super().__init__()
@@ -50,6 +52,9 @@ class STGCN(GNNClassifier):
         feat_in = in_channels + self.n_extra
         self.node_encoder = nn.Linear(feat_in, hidden_channels)
 
+        # conv_type sceglie l'operatore di grafo dentro ogni ST-block:
+        # 'gcn' | 'sage' | 'gat'. GAT gira sul path PyG (non static).
+        self.conv_type = conv_type
         pad = cnn_kernel // 2
         self.temporal1 = nn.ModuleList()
         self.gconvs = nn.ModuleList()
@@ -57,7 +62,7 @@ class STGCN(GNNClassifier):
         self.norms = nn.ModuleList()
         for _ in range(num_layers):
             self.temporal1.append(nn.Conv1d(hidden_channels, hidden_channels, cnn_kernel, padding=pad))
-            self.gconvs.append(GCNConv(hidden_channels, hidden_channels))
+            self.gconvs.append(make_graph_conv(conv_type, hidden_channels, hidden_channels, num_heads))
             self.temporal2.append(nn.Conv1d(hidden_channels, hidden_channels, cnn_kernel, padding=pad))
             self.norms.append(nn.LayerNorm(hidden_channels))
 
