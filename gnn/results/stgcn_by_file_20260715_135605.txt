@@ -1,0 +1,20 @@
+── Test Results ─────────────────────────────────────
+  Model: stgcn | Split: by_file | Params: 183,263
+  F1 Macro (argmax): 0.5800   MCC (argmax): 0.4058
+  F1 Macro (tuned):  0.6195   MCC (tuned):  0.4168   (down>=0.69 up>=0.75 | val_f1=0.630)
+  Accuracy (tuned):  0.8702
+
+              precision    recall  f1-score   support
+
+        down     0.5587    0.3799    0.4523      3219
+        flat     0.9257    0.9269    0.9263     43856
+          up     0.4199    0.5597    0.4798      2925
+
+    accuracy                         0.8702     50000
+   macro avg     0.6347    0.6222    0.6195     50000
+weighted avg     0.8725    0.8702    0.8696     50000
+
+Confusion Matrix:
+[[ 1223  1979    17]
+ [  962 40649  2245]
+ [    4  1284  1637]]

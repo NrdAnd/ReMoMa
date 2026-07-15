@@ -141,6 +141,8 @@ def main(config_path: str, overrides: dict | None = None) -> None:
         cfg["training"]["epochs"] = int(overrides["epochs"])
     if overrides.get("split") is not None:
         cfg["data"]["split_strategy"] = overrides["split"]
+    if overrides.get("seed") is not None:
+        cfg["training"]["seed"] = int(overrides["seed"])
     applied = {k: v for k, v in overrides.items() if v is not None and k != "config"}
     if applied:
         print(f"CLI overrides: {applied}\n")
@@ -327,5 +329,7 @@ if __name__ == "__main__":
                         help="override training.epochs")
     parser.add_argument("--split", choices=["by_lag", "by_file"], default=None,
                         help="override data.split_strategy (es. by_file per split onesto)")
+    parser.add_argument("--seed", type=int, default=None,
+                        help="override training.seed (per run multi-seed: 42, 43, 44)")
     args = parser.parse_args()
     main(args.config, vars(args))

@@ -9,9 +9,10 @@
 
 - Il nostro task ha **le stesse identiche label** del paper **HLOB** (Briola–Bartolucci–Aste): differenza mid-price punto-a-punto, soglia 1 tick, orizzonte 50 (verificato su Eq. 2 del PDF). Quindi il confronto è **legittimo**.
 - **HLOB su CSCO @ orizzonte 50: F1 ≈ 0.60, MCC ≈ 0.40, p_T ≈ 0.16** (il migliore di 10 modelli SOTA; l'intero campo si ferma lì). ⚠️ La prima versione di questo documento riportava **MCC 0.47: era la riga BAC** della Tabella 5, letta per errore (HLOB su BAC: 0.62/0.47/0.09).
-- Il **trio onesto `by_file` è già stato eseguito** (2026-07-08, `results/summary.csv`): **SAGE F1 0.609 / MCC 0.398 (tuned)** ≈ HLOB **0.60 / 0.40** → **parità su entrambe le metriche**, con ~30× meno dati. Caveat: singolo seed, contro una media HLOB su 3 anni.
-- L'**MCC non è più un buco**: è calcolato e auto-salvato per ogni run. L'unico passo mancante è la **varianza multi-seed** (≥3 seed).
-- **Nessuna architettura sfonda ~0.61** (soffitto informativo confermato), ma su `by_file` le differenze non sono trascurabili: **GCN è nettamente la peggiore** (0.57 tuned / 0.48 argmax), GAT la più robusta all'argmax (0.587).
+- **Tutti e 6 i modelli sono stati misurati su `by_file`** (2026-07-08/15, `results/summary.csv`). I due modelli **spazio-temporali superano HLOB** su entrambe le metriche: **CGNN 0.625 / 0.421 (tuned)**, **STGCN 0.620 / 0.417**, contro HLOB **0.60 / 0.40**. Le GNN statiche eguagliano (SAGE 0.609/0.398). ⚠️ Caveat forti: **singolo seed** e **un solo giorno di test** (5 giorni ⇒ 1 held-out), contro media HLOB su 10gg × 3 anni.
+- ⚠️ **Cambio di conclusione rispetto alla v1 di questo doc**: prima dicevo "SAGE è il campione, parità con HLOB, la CNN temporale non aiuta". I run CGNN/STGCN by_file lo ribaltano: **l'ingrediente decisivo è la dimensione temporale**, non l'operatore di grafo. GCN 0.572 → CGNN 0.625 (+0.053); ma SAGE 0.609 → CGNN-SAGE 0.601 (−0.008). La CNN temporale aiuta l'operatore debole (GCN), non quello forte (SAGE).
+- L'**MCC non è più un buco**: calcolato e auto-salvato per ogni run. Passo mancante ora prioritario: **varianza multi-seed su CGNN e STGCN** (i nuovi leader), ≥3 seed.
+- **Soffitto informativo ora stimato a ~0.62** (nessuno dei 6 supera 0.625; campo HLOB fermo a 0.60): la dimensione temporale porta *fino* al soffitto, non oltre.
 
 ---
 
@@ -75,14 +76,18 @@
 | **STHNN** lag100 — tick | by_lag | 0.6172 | — | esterno (RecurrentSparseSTHNN), label identiche |
 | **STHNN** lag100 — tick | **by_file** | **0.6115** | — | split onesto |
 | **STHNN** lag150 — tick | **by_file** | **0.6009** | — | split onesto (std); pen 0.5976 |
-| **GCN** — tick | **by_file** | 0.5715 | **0.3427** | tuned; argmax 0.4757/0.3107 (run 2026-07-08) |
-| **SAGE** — tick | **by_file** | **0.6086** | **0.3976** | tuned; argmax 0.5445/0.3844 — **best GNN, pari a HLOB (0.60/0.40)** |
-| **GAT** — tick | **by_file** | 0.5841 | **0.3710** | tuned; argmax **0.5874**/0.3794 — qui il tuning *peggiora* leggermente |
+| **CGNN** (GCN+CNN) — tick | **by_file** | **0.6246** | **0.4213** | tuned; argmax 0.5379/0.3887; val_f1=0.633 → **best assoluto, sopra HLOB** (run 2026-07-15) |
+| **STGCN** — tick | **by_file** | **0.6195** | **0.4168** | tuned; argmax 0.5800/0.4058; val_f1=0.630 → 2°, sopra HLOB (run 2026-07-15) |
+| **SAGE** — tick | **by_file** | 0.6086 | 0.3976 | tuned; argmax 0.5445/0.3844 — best GNN statica, ≈ HLOB |
+| **CGNN-SAGE** — tick | **by_file** | 0.6008 | 0.3868 | tuned; argmax 0.5529/0.3803 — CNN temporale NON aiuta SAGE (−0.008) |
+| **GAT** — tick | **by_file** | 0.5841 | 0.3710 | tuned; argmax **0.5874**/0.3794 — qui il tuning *peggiora* leggermente |
+| **GCN** — tick | **by_file** | 0.5715 | 0.3427 | tuned; argmax 0.4757/0.3107 — peggiore da sola; +0.053 con la CNN (→CGNN) |
 
-- **by_lag → by_file costa ~0.006 F1 per STHNN** (0.6172→0.6115, verificato nel report esterno). ⚠️ Misurato **solo su STHNN**: per GCN/SAGE/GAT non esiste un confronto same-model by_lag/by_file su tick — non generalizzare.
+- **by_lag → by_file trascurabile, ora confermato su 3 modelli**: STHNN 0.6172→0.6115 (report esterno); CGNN 0.628→0.6246; STGCN 0.623→0.6195. Calo ~0.004–0.006, coerente col soffitto (poco segnale da "rubare" con lo split ottimistico). Non più una stima solo-STHNN.
+- **La dimensione temporale è il fattore chiave** (vedi TL;DR): GCN 0.572 → CGNN 0.625; ma SAGE 0.609 → CGNN-SAGE 0.601. La CNN aiuta l'operatore debole, non quello forte. Miglior modello = **GCN + temporale**.
+- Il tuning ha generalizzato (non è artefatto): val_f1 0.633 → test 0.625 (CGNN), 0.630 → 0.620 (STGCN); salto ~0.01. Eccezione GAT, dove il tuning *peggiora* (0.5874→0.5841).
 - STHNN by_file: Weighted F1 ~0.88, signal precision ~0.42–0.44, signal recall ~0.51–0.54.
-- ✅ **GCN standalone su label TICK ora misurata** (by_file, riga sopra): tuned 0.5715 — nettamente sotto SAGE e GAT. Il "0.629" resta su label PCT (task diverso); il "0.628" è CGNN, non GCN nuda.
-- Nota sul tuning: aiuta molto GCN (+0.10) e SAGE (+0.06), ma per GAT le soglie tarate su val non generalizzano al test (0.5874→0.5841): non è gratis sempre.
+- Il "0.629" storico resta su label PCT (task diverso), non confrontabile.
 
 ### 3b. Run nuovi SAGE / GAT / GCN (tick, `by_lag`) — SOLO traiettorie di val
 
@@ -96,21 +101,21 @@ Questi run hanno prodotto solo `metrics.csv` per-epoca (val, argmax). **I blocch
 
 **NON è un ranking**: val, argmax, `by_lag`, **singolo seed**, e "best" = max su epoche rumorose (biased verso l'alto). Il gap SAGE–GCN (0.05) sta dentro l'oscillazione epoca-epoca di GCN stesso (0.13). Tutti overfittano (train_acc → 0.72–0.74 mentre val_f1 resta ~0.50).
 
-**Verdetto preliminare — SUPERATO dai run `by_file` di §3a**: su val by_lag tutte stavano in banda ~0.55–0.60 e sembrava che "l'attenzione di GAT non aiuta". I run onesti lo contraddicono in parte: **all'argmax GAT è il migliore (0.587) e GCN il peggiore (0.476)**; anche tuned, SAGE (0.609) e GAT (0.584) battono la GCN nuda (0.572). Risposta aggiornata a "SAGE/GAT per fare meglio?": **sì rispetto alla GCN**, no rispetto al soffitto ~0.61 (sempre su singolo seed).
+**Verdetto — SUPERATO dai run `by_file` di §3a**: la domanda "quale architettura?" ha una risposta diversa da quella suggerita da questi run di val by_lag. Il ranking onesto (tuned) è **CGNN 0.625 > STGCN 0.620 > SAGE 0.609 > CGNN-SAGE 0.601 > GAT 0.584 > GCN 0.572**. Non è l'operatore di grafo a decidere, ma la **dimensione temporale**: i due modelli con CNN sui lag stanno sopra. Tra le sole GNN statiche SAGE resta la migliore, ma non è il campione assoluto.
 
 ---
 
 ## 4. Considerazioni metodologiche (importanti, evitano errori di valutazione)
 
-1. **Soffitto informativo** — evidenza principale: (a) plateau di train_acc; (b) tutti i modelli/operatori di grafo ~0.60–0.63; (c) linear probe ≈ GNN; (d) il campo HLOB (10 SOTA, 3 anni) si ferma a 0.60. Il limite è il **segnale**, non l'architettura. NB: i confronti a singolo run entro ±0.01 sono **rumore**, non evidenza — il plateau lo è.
+1. **Soffitto informativo ~0.62** — evidenza: (a) plateau di train_acc; (b) i 6 modelli si dispongono tra 0.57 e 0.625, con un tetto netto a ~0.62 raggiunto dai modelli spazio-temporali; (c) linear probe ≈ GNN; (d) il campo HLOB (10 SOTA, 3 anni) si ferma a 0.60. Il limite è il **segnale**, non l'architettura: la dimensione temporale porta *fino* al soffitto, non oltre. NB: i confronti a singolo run entro ±0.01 sono **rumore**; lo scarto dei 2 leader sul resto (~0.02) va confermato multi-seed prima di darlo per solido.
 
 2. **Il tuning delle soglie NON gonfia** — è legittimo: leakage-free (tarato su val, applicato a test) ed è la scelta *corretta* per la macro-F1 su classi sbilanciate (l'argmax minimizza l'error-rate, non la macro-F1). LOBFrame stesso calcola metriche al variare della soglia → forse neanche HLOB è argmax puro. Va **tenuto e riportato**.
 
-3. **`by_lag` è leaky ma poco** — `split_by_lag` (`src/dataset/preprocessing.py:63-102`) divide la timeline di **ogni giorno** in 70/15/15, quindi ogni giornata entra in train+val+test (leak intraday + nessun embargo a k=50). Empiricamente però costa solo ~0.006 F1 (misurato **solo su STHNN**) → non sembra il vero problema. Per il confronto con HLOB usare comunque **`by_file`** (onesto).
+3. **`by_lag` è leaky ma poco** — `split_by_lag` (`src/dataset/preprocessing.py:63-102`) divide la timeline di **ogni giorno** in 70/15/15, quindi ogni giornata entra in train+val+test (leak intraday + nessun embargo a k=50). Empiricamente costa solo ~0.004–0.006 F1 (ora confermato su STHNN, CGNN e STGCN) → non è il vero problema. Per il confronto con HLOB usare comunque **`by_file`** (onesto).
 
-4. **MCC — buco CHIUSO** — HLOB fa headline su F1 **+ MCC**, che su CSCO è **0.40** (non 0.47: quello era BAC). L'MCC è ora calcolato e salvato per ogni run: **SAGE tuned 0.3976 ≈ 0.40 di HLOB** → non siamo indietro sull'MCC. Empiricamente il timore "tarare per F1 costa MCC" non si è avverato (SAGE: MCC 0.384 argmax → 0.398 tuned); l'unico caso storto è GAT, dove il tuning peggiora *entrambe* le metriche.
+4. **MCC — buco CHIUSO, e ora sopra HLOB** — HLOB fa headline su F1 **+ MCC**, che su CSCO è **0.40** (non 0.47: quello era BAC). L'MCC è calcolato e salvato per ogni run: **CGNN tuned 0.4213 e STGCN 0.4168 superano 0.40 di HLOB**; SAGE 0.3976 lo eguaglia. Il timore "tarare per F1 costa MCC" non si è avverato (i leader migliorano l'MCC dopo tuning); unico caso storto GAT, dove il tuning peggiora *entrambe* le metriche.
 
-5. **Dove siamo davvero** — su `by_file` + tuning i migliori (STHNN 0.6115 F1; SAGE 0.6086 F1 / 0.3976 MCC) stanno **alla pari con HLOB (0.60 F1 / 0.40 MCC)** con ~30× meno dati (5 giorni vs 3 anni). **Pari su F1 E MCC** — ma su singolo seed contro una media su 3 anni: serve la varianza multi-seed (§6) prima di dichiararlo con rigore.
+5. **Dove siamo davvero** — su `by_file` + tuning i migliori (**CGNN 0.625 F1 / 0.421 MCC**, STGCN 0.620 / 0.417) **superano HLOB (0.60 / 0.40)** su entrambe le metriche, con ~30× meno dati. **Ma** su (a) singolo seed e (b) **un solo giorno di test** (5gg ⇒ 1 held-out), contro media HLOB su 10gg × 3 anni. Il multi-seed (§6) copre solo (a); (b) — la varianza giorno-per-giorno — resta il limite più serio e richiede più dati. Formulazione onesta: *sopra HLOB su questo titolo e questo giorno, in attesa di conferma*.
 
 6. **Confronti apples-to-apples** — non confrontare mai: 0.629 (PCT) con 0.60 (tick); 0.628 tuned by_lag con 0.60 argmax by_file; val con test. Tenere fisse: label, split, decision rule, metrica.
 
@@ -134,11 +139,11 @@ Questi run hanno prodotto solo `metrics.csv` per-epoca (val, argmax). **I blocch
 
 ## 6. Prossimi passi (per chiudere il confronto con HLOB)
 
-1. ~~Sincronizzare il codice su Lightning~~ → ✅ **fatto** (commit `3440d54`; i run by_file lo dimostrano).
-2. ~~Lanciare il trio onesto~~ → ✅ **fatto** (2026-07-08, vedi §3a e `results/summary.csv`): GCN 0.5715/0.3427, SAGE **0.6086/0.3976**, GAT 0.5841/0.3710 (tuned, by_file).
+1. ~~Sincronizzare il codice su Lightning~~ → ✅ **fatto** (commit `3440d54`).
+2. ~~Lanciare il trio onesto~~ → ✅ **fatto**; poi anche **CGNN, STGCN, CGNN-SAGE** su by_file (2026-07-15). Tutti e 6 i modelli sono in `results/summary.csv`.
 3. ~~Salvare F1 + MCC in summary.csv~~ → ✅ **fatto** (argmax & tuned per ognuno).
-4. **≥3 seed per modello — UNICO PASSO RIMASTO** (il val_f1 oscilla molto: serve la varianza, non un singolo picco). Nota: `scripts/train.py` non ha `--seed`; il seed è in config `training.seed: 42` → editare o aggiungere flag. Rilanciare almeno SAGE (il candidato alla parità) con seed 43 e 44.
-5. Piazzare media±std (F1+MCC) accanto alla riga CSCO **corretta** di HLOB (0.60 / 0.40 / 0.16) → verdetto onesto. Con i numeri attuali a singolo seed il verdetto provvisorio è **parità piena**.
+4. **≥3 seed — UNICO PASSO RIMASTO, ora prioritario su CGNN e STGCN** (i leader, non più SAGE). Il flag `--seed` è stato aggiunto a `scripts/train.py`; il seed **non entra nella firma della cache** (`preprocess_signature`, preprocessing.py:162), quindi `--seed 43` riusa i tensori by_file e varia **solo** l'inizializzazione (test set identico = confronto pulito). Lanciare: `--model cgnn --split by_file --seed 43/44` e idem stgcn.
+5. Piazzare media±std (F1+MCC) accanto alla riga CSCO **corretta** di HLOB (0.60 / 0.40 / 0.16). Verdetto provvisorio a singolo seed: **CGNN/STGCN sopra HLOB** su entrambe le metriche (0.62/0.42 vs 0.60/0.40). ⚠️ Il multi-seed NON copre la varianza giorno-per-giorno (1 solo giorno di test): quella richiede più dati.
 
 ### Idee aperte (oltre il confronto)
 - **Order-flow** (`src/dataset/order_flow.py`) come **feature di NODO** (non vettore globale a 6); aggiungere OFI, spread. Bloccato su disallineamento message/orderbook su 3/5 giorni.
@@ -158,7 +163,7 @@ Questi run hanno prodotto solo `metrics.csv` per-epoca (val, argmax). **I blocch
 | Trainer | `src/training/trainer.py` |
 | Split / preprocessing | `src/dataset/preprocessing.py` (`split_by_lag` :63, `split_by_file` :49) |
 | Labeling | `src/dataset/labeling.py` |
-| Modelli | `src/models/{gcn,cgnn,stgcn,sage,gat}.py` |
+| Modelli | `src/models/{gcn,cgnn,stgcn,sage,gat}.py` (CGNN-SAGE = CGNN con `conv_type="sage"`, registrato come `cgnn_sage` in `__init__.py`) |
 | Adiacenza TMFG | `../tmfg/cisco_tmfg_adj_matrix_2000_bins.csv` |
 | Report STHNN (esterno) | `/Users/simone/Downloads/RecurrentSparseSTHNN Full Experiment Report.pdf` |
 | Paper HLOB | `/Users/simone/Desktop/Info LOB.pdf` (arXiv:2405.18938) |
@@ -168,4 +173,4 @@ Questi run hanno prodotto solo `metrics.csv` per-epoca (val, argmax). **I blocch
 
 ## 8. Riepilogo in una frase
 
-> Sullo stesso task e split onesto, i nostri migliori modelli (SAGE 0.609 F1 / 0.398 MCC; STHNN 0.611 F1) sono **alla pari con HLOB su CSCO in entrambe le metriche (0.60 F1 / 0.40 MCC — valori corretti della Tabella 5, non 0.47)** usando una frazione dei dati; manca solo la **varianza multi-seed** per dirlo con rigore. Nessuna architettura sfonda il **soffitto ~0.61** — limite di **segnale**, non di modello — anche se su `by_file` la GCN nuda è nettamente la peggiore del gruppo.
+> Sullo stesso task e split onesto, i nostri modelli **spazio-temporali** (CGNN 0.625 F1 / 0.421 MCC; STGCN 0.620 / 0.417) **superano HLOB su CSCO** in entrambe le metriche (0.60 / 0.40 — valori corretti della Tabella 5, non 0.47), con ~30× meno dati; le GNN statiche (SAGE 0.609) lo eguagliano. L'ingrediente decisivo è la **dimensione temporale** (CNN sui lag), non l'operatore di grafo. Nessuno sfonda il **soffitto ~0.62** — limite di **segnale**. Caveat da non nascondere al prof: **singolo seed** e **un solo giorno di test**, contro la media HLOB su 10gg × 3 anni.

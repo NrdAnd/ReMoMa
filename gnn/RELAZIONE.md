@@ -1,15 +1,15 @@
 # GNN su grafo TMFG per la predizione della direzione del mid-price da Limit Order Book
 
-> Riassunto della ricerca — 2026-07-09
+> Riassunto della ricerca — 2026-07-15
 > Dati: LOB di Cisco (CSCO), LOBSTER, 5 giorni (gennaio 2019). Benchmark di riferimento: paper HLOB (Briola, Bartolucci, Aste — arXiv:2405.18938).
 
 ---
 
 ## Sintesi dei risultati
 
-Con **5 giorni di dati** (contro i ~3 anni del benchmark) e uno **split di valutazione onesto** (giorni interi mai visti in training), il nostro miglior modello GNN raggiunge **F1 macro 0.609 / MCC 0.398**, contro **F1 0.60 / MCC 0.40** di HLOB — il migliore di 10 modelli SOTA sullo stesso titolo, stesso task e stesse label. Siamo cioè **alla pari con lo stato dell'arte usando ~30× meno dati**.
+Con **5 giorni di dati** (contro i ~3 anni del benchmark) e uno **split di valutazione onesto** (giorni interi mai visti in training), i nostri due modelli **spazio-temporali** raggiungono **F1 macro 0.625 / MCC 0.421** (CGNN) e **0.620 / 0.417** (STGCN), contro **F1 0.60 / MCC 0.40** di HLOB — il migliore di 10 modelli SOTA sullo stesso titolo, stesso task e stesse label. Su questo titolo, quindi, i nostri modelli **superano lo stato dell'arte su entrambe le metriche, usando ~30× meno dati** (in attesa di conferma multi-seed, vedi §8).
 
-Il secondo risultato, altrettanto importante: **sei architetture diverse convergono tutte nella banda 0.57–0.61 di F1**, e anche il campo dei 10 modelli SOTA del paper si ferma a 0.60. Questo indica un **soffitto informativo del segnale** (quanto il libro ordini permette di prevedere a questo orizzonte), non un limite dei modelli.
+Il secondo risultato, di natura più teorica: **l'ingrediente decisivo è la dimensione temporale, non l'operatore di grafo.** Le tre GNN "statiche" (GCN, SAGE, GAT) si fermano a 0.57–0.61; aggiungendo una convoluzione temporale sui lag (CGNN, STGCN) si sale a ~0.62. Sopra questa soglia non si va: si intravede un **soffitto informativo del segnale** a ~0.62 (quanto il libro ordini permette di prevedere a questo orizzonte), non un limite dei modelli — coerente col fatto che anche i 10 modelli SOTA del paper si fermano a 0.60.
 
 ---
 
@@ -55,27 +55,31 @@ A questi si aggiunge il progetto parallelo **RecurrentSparseSTHNN** (rete ipergr
 
 ## 5. Risultati (split onesto, test = giorno mai visto, 50k campioni)
 
+Ordinati per F1 tuned. In grassetto i due modelli spazio-temporali, che dominano la tabella.
+
 | Modello | F1 (argmax) | MCC (argmax) | F1 (tuned) | MCC (tuned) | F1 down / flat / up (tuned) |
 |---|---|---|---|---|---|
-| GCN | 0.476 | 0.311 | 0.572 | 0.343 | 0.40 / 0.91 / 0.41 |
-| **GraphSAGE** | 0.545 | 0.384 | **0.609** | **0.398** | 0.45 / 0.92 / 0.45 |
-| GAT | **0.587** | 0.379 | 0.584 | 0.371 | 0.44 / 0.90 / 0.42 |
+| **CGNN** (GCN + CNN temporale) | 0.538 | 0.389 | **0.625** | **0.421** | 0.48 / 0.93 / 0.47 |
+| **STGCN** (blocchi spazio-temp.) | 0.580 | 0.406 | **0.620** | **0.417** | 0.45 / 0.93 / 0.48 |
+| GraphSAGE | 0.545 | 0.384 | 0.609 | 0.398 | 0.45 / 0.92 / 0.45 |
 | CGNN-SAGE | 0.553 | 0.380 | 0.601 | 0.387 | 0.46 / 0.91 / 0.43 |
+| GAT | 0.587 | 0.379 | 0.584 | 0.371 | 0.44 / 0.90 / 0.42 |
+| GCN | 0.476 | 0.311 | 0.572 | 0.343 | 0.40 / 0.91 / 0.41 |
 | STHNN (lag 100) | — | — | 0.612 | — | progetto parallelo |
 | STHNN (lag 150) | — | — | 0.601 | — | progetto parallelo |
 
-Matrice di confusione del migliore (GraphSAGE, tuned; righe = vero, colonne = predetto):
+Matrice di confusione del migliore (CGNN, tuned; righe = vero, colonne = predetto):
 
 ```
           down    flat     up
-down      1237    1973      9        ← quasi mai confonde down con up
-flat      1050   40311   2495
-up           1    1326   1598
+down      1482    1729      8        ← quasi mai confonde down con up
+flat      1445   40561   1850
+up           4    1468   1453
 ```
 
-Il modello praticamente **non confonde mai le due direzioni tra loro** (10 errori su 6144 campioni direzionali): gli errori sono quasi tutti verso/da la classe flat, cioè sul "quando" il segnale è abbastanza forte, non sul "dove" va il prezzo.
+Il modello praticamente **non confonde mai le due direzioni tra loro** (12 errori su 6144 campioni direzionali): gli errori sono quasi tutti verso/da la classe flat, cioè sul "quando" il segnale è abbastanza forte, non sul "dove" va il prezzo.
 
-Risultati storici sullo split esplorativo `by_lag` (non confrontabili coi precedenti): CGNN 0.628, STGCN 0.623, STHNN 0.617 (tuned).
+**Coerenza col vecchio split esplorativo `by_lag`**: CGNN faceva 0.628 e STGCN 0.623; su `by_file` fanno 0.625 e 0.620. Il calo dovuto allo split onesto è ~0.004 — trascurabile, e in linea con lo STHNN (~0.006). I numeri sono internamente consistenti, non frutto del caso.
 
 ## 6. Confronto con il benchmark HLOB
 
@@ -90,29 +94,35 @@ Il paper HLOB valuta **10 architetture SOTA** (DeepLOB, transformer, TABL, ecc. 
 
 | Nostri (5 giorni, split onesto) | F1 | MCC |
 |---|---|---|
-| **GraphSAGE** | **0.609** | **0.398** |
-| CGNN-SAGE | 0.601 | 0.387 |
+| **CGNN** (GCN + CNN temporale) | **0.625** | **0.421** |
+| **STGCN** | **0.620** | **0.417** |
+| GraphSAGE | 0.609 | 0.398 |
 | STHNN | 0.612 | — |
 
-**Lettura**: con una frazione dei dati (5 giorni vs ~3 anni) i nostri modelli raggiungono il vertice del campo su entrambe le metriche. Non lo superano — e questo è il punto teoricamente interessante.
+**Lettura**: con una frazione dei dati (5 giorni vs ~3 anni) i nostri modelli spazio-temporali **superano** il vertice del campo HLOB (0.60/0.40) su entrambe le metriche; le GNN statiche lo eguagliano. Due precisazioni doverose (§8): il risultato è su **singolo seed** e su **un unico giorno di test** (5 giorni ⇒ un solo giorno held-out), mentre HLOB media su 10 giorni × 3 anni. Quindi "superiamo HLOB" va inteso come *su questo titolo e questo giorno*, in attesa della varianza multi-seed.
 
 ## 7. Cosa abbiamo imparato
 
-1. **Esiste un soffitto informativo a ~0.60–0.61 di F1.** Sei nostre architetture + dieci del paper, con quantità di dati diversissime, convergono tutte lì. Il collo di bottiglia è il contenuto predittivo del LOB a questo orizzonte, non la capacità dei modelli.
+1. **La dimensione temporale esplicita è l'ingrediente decisivo.** I due modelli che aggiungono una convoluzione temporale sui lag prima/dentro il message passing (CGNN, STGCN) sono i migliori (~0.62); le tre GNN statiche (GCN, SAGE, GAT) restano a 0.57–0.61. La struttura a lag del grafo da sola non basta: serve un operatore che modelli esplicitamente l'evoluzione nel tempo.
 
-2. **L'operatore di grafo conta, entro il soffitto.** GCN nuda è nettamente la peggiore (0.572); SAGE, che separa la rappresentazione del nodo da quella dei vicini, è la migliore (0.609). L'attention di GAT non paga rispetto a SAGE, ma è la più robusta senza tuning delle soglie.
+2. **La CNN temporale aiuta l'operatore debole, non quello forte.** Il confronto controllato lo mostra con chiarezza:
+   - GCN 0.572 → **CGNN 0.625** (+0.053): la CNN temporale trasforma l'operatore peggiore nel migliore.
+   - SAGE 0.609 → CGNN-SAGE 0.601 (−0.008): su un operatore già forte la stessa CNN non aggiunge nulla (anzi, avendo dovuto ridurre l'hidden per restare a budget, perde un filo di capacità).
+   
+   Morale: da sole, SAGE > GCN (l'operatore conta); ma con la CNN temporale la GCN recupera e sorpassa. Il miglior modello è **GCN + temporale**, non una variante di SAGE.
 
-3. **Aggiungere la dimensione temporale esplicita non sfonda il soffitto.** L'ibrido CGNN-SAGE (CNN sui lag + SAGE sul grafo) fa 0.601: alla pari con SAGE puro (differenza −0.008, dentro il rumore da singolo seed). Coerente con l'ipotesi del soffitto: l'informazione temporale è già catturata dalla struttura a lag del grafo.
+3. **Esiste comunque un soffitto informativo, ora stimabile a ~0.62 di F1.** Nessuno dei sei modelli supera 0.625, e il campo di 10 modelli SOTA del paper si ferma a 0.60. Il collo di bottiglia resta il contenuto predittivo del LOB a questo orizzonte: la dimensione temporale porta i modelli *fino* al soffitto, non oltre.
 
-4. **Il tuning delle soglie vale +0.05–0.10 di F1** rispetto all'argmax (tranne per GAT, già ben calibrato). È una procedura senza leakage e metodologicamente corretta per classi sbilanciate.
+4. **Il tuning delle soglie vale +0.05–0.10 di F1** rispetto all'argmax (tranne per GAT, già ben calibrato). È una procedura senza leakage e metodologicamente corretta per classi sbilanciate. Che il numero non sia un artefatto lo conferma il fatto che la F1 di validation (0.63) predice bene quella di test (0.62): il salto val→test è solo ~0.01.
 
 5. **Gli errori residui sono di "intensità", non di direzione**: le confusioni down↔up sono quasi assenti; il modello sbaglia solo nel distinguere un movimento ≥1 tick dal rumore.
 
 ## 8. Limiti e prossimi passi
 
-- **Singolo seed**: i numeri riportati sono di un run per modello. Il passo successivo è la ripetizione con ≥3 seed per riportare media ± deviazione standard (indispensabile per affermare la parità con HLOB con rigore statistico, dato che HLOB media su 3 anni).
+- **Singolo seed**: i numeri riportati sono di un run per modello. Il passo successivo — ora prioritario proprio su CGNN e STGCN — è la ripetizione con ≥3 seed per riportare media ± deviazione standard. Serve per affermare con rigore statistico il sorpasso su HLOB: lo scarto dei due leader sul resto del campo (~0.02) va confermato oltre il rumore di inizializzazione.
+- **Un solo giorno di test**: con 5 giorni di dati, lo split onesto lascia **un unico giorno held-out**. Tutti i numeri vivono sulla distribuzione di quel giorno; HLOB media su 10 giorni × 3 anni. Il multi-seed varia l'inizializzazione ma **non** questo: la varianza giorno-per-giorno resta ignota ed è il limite più serio del confronto. Più giorni di dati LOBSTER sono la via per chiuderlo.
 - **Terza metrica**: HLOB riporta anche p_T (probabilità di chiudere correttamente una transazione round-trip); una metrica analoga è in preparazione.
-- **Oltre il soffitto**: l'unica strada plausibile non è cambiare architettura ma **cambiare l'informazione in ingresso** — es. feature di order-flow (OFI, spread) per nodo, attualmente in sviluppo.
+- **Oltre il soffitto ~0.62**: avendo visto che la dimensione temporale porta i modelli fino al soffitto ma non oltre, la strada plausibile non è più cambiare architettura ma **cambiare l'informazione in ingresso** — es. feature di order-flow (OFI, spread) per nodo, attualmente in sviluppo.
 
 ---
 
