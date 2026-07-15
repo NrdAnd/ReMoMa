@@ -81,7 +81,7 @@ Il modello praticamente **non confonde mai le due direzioni tra loro** (12 error
 
 **Coerenza col vecchio split esplorativo `by_lag`**: CGNN faceva 0.628 e STGCN 0.623; su `by_file` fanno 0.625 e 0.620. Il calo dovuto allo split onesto è ~0.004 — trascurabile, e in linea con lo STHNN (~0.006). I numeri sono internamente consistenti, non frutto del caso.
 
-> **Controllo di capacità su CGNN-SAGE** (diagnostico, fuori dal budget parametri): a hidden 175 (273k param, invece dei 140/185k a budget) CGNN-SAGE sale a **F1 0.615 / MCC 0.408** e batte SAGE puro. Conferma che il suo −0.008 a budget era il taglio di capacità, non l'inutilità della CNN (vedi §7.2). Non entra nella classifica sopra perché non è a parità di parametri.
+> **Nota su CGNN-SAGE a più parametri** (273k, fuori budget): a hidden 175 sale a F1 0.615 / MCC 0.408. ⚠️ **Non** dimostra che la CNN aiuti SAGE: è confrontato con un SAGE da soli 182k, quindi il guadagno può essere puro effetto di 1,5× i parametri. Serve il controllo a parametri appaiati (SAGE puro @ ~273k) — vedi §8.
 
 ## 6. Confronto con il benchmark HLOB
 
@@ -107,11 +107,11 @@ Il paper HLOB valuta **10 architetture SOTA** (DeepLOB, transformer, TABL, ecc. 
 
 1. **La dimensione temporale esplicita è l'ingrediente decisivo.** I due modelli che aggiungono una convoluzione temporale sui lag prima/dentro il message passing (CGNN, STGCN) sono i migliori (~0.62); le tre GNN statiche (GCN, SAGE, GAT) restano a 0.57–0.61. La struttura a lag del grafo da sola non basta: serve un operatore che modelli esplicitamente l'evoluzione nel tempo.
 
-2. **La CNN temporale aiuta entrambi gli operatori, ma è cara in parametri.** Un confronto controllato (a capacità appaiata) lo chiarisce:
-   - GCN 0.572 → **CGNN 0.625** (+0.053): sulla GCN, operatore "economico", la CNN entra nel budget ~180k e trasforma il modello peggiore nel migliore.
-   - SAGE 0.609 → CGNN-SAGE **a budget** 0.601 (−0.008), ma → CGNN-SAGE **a capacità piena** (hidden 175, 273k param) **0.615** (+0.006): la CNN aggiunge segnale anche a SAGE — il calo a budget era dovuto al taglio dell'hidden a 140 (SAGEConv ha 2 matrici/layer, "costa" il doppio), non alla CNN.
+2. **La CNN temporale aiuta la GCN, ma non SAGE (a parità di budget).** Confronti equi (~180k parametri):
+   - GCN 0.572 (206k param) → **CGNN 0.625** (181k): la CNN trasforma l'operatore peggiore nel migliore, e con *meno* parametri. Solido.
+   - SAGE 0.609 (182k) → CGNN-SAGE 0.601 (185k): a parità di budget la CNN **non** aiuta SAGE (anzi, −0.008).
    
-   Morale: la dimensione temporale porta segnale a qualunque operatore; la differenza è il *costo*. La GCN è abbastanza economica da permettersi CNN + capacità piena entro budget, SAGE no. Il miglior modello a parità di budget resta quindi **GCN + temporale** (0.625 con 181k param), più efficiente del CNN+SAGE anche quando quest'ultimo gira a 273k.
+   Morale a budget: **GCN + temporale** è il migliore (0.625 con 181k param). Perché la CNN aiuti la GCN e non SAGE è un'ipotesi aperta (SAGE potrebbe già catturare parte della dinamica). ⚠️ *Un run di CGNN-SAGE a 273k parametri arriva a 0.615, ma non prova che "la CNN aiuti SAGE": ha 1,5× i parametri del SAGE di confronto, quindi il guadagno può essere solo capacità. Il controllo che chiude la domanda — SAGE puro scalato a ~273k — è da fare (§8).*
 
 3. **Esiste comunque un soffitto informativo, ora stimabile a ~0.62 di F1.** Nessuno dei sei modelli supera 0.625, e il campo di 10 modelli SOTA del paper si ferma a 0.60. Il collo di bottiglia resta il contenuto predittivo del LOB a questo orizzonte: la dimensione temporale porta i modelli *fino* al soffitto, non oltre.
 
@@ -123,6 +123,7 @@ Il paper HLOB valuta **10 architetture SOTA** (DeepLOB, transformer, TABL, ecc. 
 
 - **Singolo seed**: i numeri riportati sono di un run per modello. Il passo successivo — ora prioritario proprio su CGNN e STGCN — è la ripetizione con ≥3 seed per riportare media ± deviazione standard. Serve per affermare con rigore statistico il sorpasso su HLOB: lo scarto dei due leader sul resto del campo (~0.02) va confermato oltre il rumore di inizializzazione.
 - **Un solo giorno di test**: con 5 giorni di dati, lo split onesto lascia **un unico giorno held-out**. Tutti i numeri vivono sulla distribuzione di quel giorno; HLOB media su 10 giorni × 3 anni. Il multi-seed varia l'inizializzazione ma **non** questo: la varianza giorno-per-giorno resta ignota ed è il limite più serio del confronto. Più giorni di dati LOBSTER sono la via per chiuderlo.
+- **Controllo a parametri appaiati per CGNN-SAGE**: far girare SAGE puro scalato a ~273k parametri (hidden ~196). Se raggiunge già ~0.615, il guadagno del CGNN-SAGE a capacità era solo parametri, non la CNN; se resta ~0.609, la CNN aggiunge segnale a SAGE. Chiude l'ipotesi lasciata aperta in §7.2.
 - **Terza metrica**: HLOB riporta anche p_T (probabilità di chiudere correttamente una transazione round-trip); una metrica analoga è in preparazione.
 - **Oltre il soffitto ~0.62**: avendo visto che la dimensione temporale porta i modelli fino al soffitto ma non oltre, la strada plausibile non è più cambiare architettura ma **cambiare l'informazione in ingresso** — es. feature di order-flow (OFI, spread) per nodo, attualmente in sviluppo.
 

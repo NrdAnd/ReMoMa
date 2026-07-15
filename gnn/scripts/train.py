@@ -135,6 +135,10 @@ def main(config_path: str, overrides: dict | None = None) -> None:
         # write into the selected arch's preset so it wins over the default
         mt = cfg["model"]["type"].lower()
         cfg["model"].setdefault("overrides", {}).setdefault(mt, {})["hidden_channels"] = overrides["hidden"]
+    if overrides.get("cnn_channels") is not None:
+        # scale the temporal-CNN intermediate width (cgnn* only) for capacity tests
+        mt = cfg["model"]["type"].lower()
+        cfg["model"].setdefault("overrides", {}).setdefault(mt, {})["cnn_channels"] = overrides["cnn_channels"]
     if overrides.get("lr") is not None:
         cfg["training"]["lr"] = float(overrides["lr"])
     if overrides.get("epochs") is not None:
@@ -330,6 +334,8 @@ if __name__ == "__main__":
                         help="override model.type (es. stgcn)")
     parser.add_argument("--hidden", type=int, default=None,
                         help="override model.hidden_channels (es. 160 per SAGE)")
+    parser.add_argument("--cnn-channels", dest="cnn_channels", type=int, default=None,
+                        help="override cnn_channels della CNN temporale (cgnn*); per test di capacità")
     parser.add_argument("--lr", type=float, default=None,
                         help="override training.lr")
     parser.add_argument("--epochs", type=int, default=None,
