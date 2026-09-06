@@ -9,6 +9,7 @@ dependencies:
   - pip
   - pip:
       - torch==2.2.0
+      - torch_geometric
       - pandas
       - numpy
       - scikit-learn

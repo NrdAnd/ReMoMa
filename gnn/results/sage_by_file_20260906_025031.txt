@@ -1,0 +1,20 @@
+── Test Results ─────────────────────────────────────
+  Model: sage | Split: by_file | Params: 271,855
+  F1 Macro (argmax): 0.5319   MCC (argmax): 0.3733
+  F1 Macro (tuned):  0.6253   MCC (tuned):  0.4204   (down>=0.73 up>=0.65 | val_f1=0.623)
+  Accuracy (tuned):  0.8633
+
+              precision    recall  f1-score   support
+
+        down     0.5240    0.4756    0.4987      3120
+        flat     0.9298    0.9133    0.9215     43871
+          up     0.3964    0.5364    0.4559      3009
+
+    accuracy                         0.8633     50000
+   macro avg     0.6167    0.6418    0.6253     50000
+weighted avg     0.8723    0.8633    0.8671     50000
+
+Confusion Matrix:
+[[ 1484  1634     2]
+ [ 1346 40069  2456]
+ [    2  1393  1614]]

@@ -1,0 +1,20 @@
+── Test Results ─────────────────────────────────────
+  Model: cgnn | Split: by_file | Params: 181,450
+  F1 Macro (argmax): 0.5442   MCC (argmax): 0.3928
+  F1 Macro (tuned):  0.6295   MCC (tuned):  0.4287   (down>=0.75 up>=0.75 | val_f1=0.630)
+  Accuracy (tuned):  0.8694
+
+              precision    recall  f1-score   support
+
+        down     0.5010    0.4946    0.4977      3120
+        flat     0.9293    0.9217    0.9255     43871
+          up     0.4380    0.4962    0.4653      3009
+
+    accuracy                         0.8694     50000
+   macro avg     0.6227    0.6375    0.6295     50000
+weighted avg     0.8730    0.8694    0.8711     50000
+
+Confusion Matrix:
+[[ 1543  1567    10]
+ [ 1531 40434  1906]
+ [    6  1510  1493]]

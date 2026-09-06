@@ -248,7 +248,8 @@ def main(config_path: str, overrides: dict | None = None) -> None:
         factor=cfg["training"].get("lr_scheduler_factor", 0.5),
     )
 
-    ckpt_dir = Path(cfg["paths"]["checkpoints"])
+    ckpt_dir = (Path(cfg["paths"]["checkpoints"])
+                / f'{cfg["model"]["type"].lower()}_{data_cfg["split_strategy"]}_seed{cfg["training"]["seed"]}_h{cfg["model"]["hidden_channels"]}')
     trainer = Trainer(
         model=model,
         optimizer=optimizer,
@@ -322,6 +323,7 @@ def main(config_path: str, overrides: dict | None = None) -> None:
     _append_summary(results_dir / "summary.csv", summary_rows)
     print(f"\n[saved] full report → {txt_path}")
     print(f"[saved] summary → {results_dir / 'summary.csv'}")
+    print(f"[saved] weights → {ckpt_dir / 'best.pt'}")
 
 
 if __name__ == "__main__":

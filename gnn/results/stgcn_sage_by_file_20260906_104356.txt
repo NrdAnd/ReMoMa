@@ -1,0 +1,20 @@
+── Test Results ─────────────────────────────────────
+  Model: stgcn_sage | Split: by_file | Params: 181,899
+  F1 Macro (argmax): 0.5721   MCC (argmax): 0.4096
+  F1 Macro (tuned):  0.6324   MCC (tuned):  0.4322   (down>=0.75 up>=0.65 | val_f1=0.634)
+  Accuracy (tuned):  0.8716
+
+              precision    recall  f1-score   support
+
+        down     0.5382    0.4737    0.5039      3120
+        flat     0.9290    0.9246    0.9268     43871
+          up     0.4289    0.5115    0.4666      3009
+
+    accuracy                         0.8716     50000
+   macro avg     0.6320    0.6366    0.6324     50000
+weighted avg     0.8745    0.8716    0.8727     50000
+
+Confusion Matrix:
+[[ 1478  1633     9]
+ [ 1267 40564  2040]
+ [    1  1469  1539]]

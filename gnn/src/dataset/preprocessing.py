@@ -400,7 +400,9 @@ def preprocess_to_disk(
             f"val={len(val_s):,} | test={len(test_s):,}"
         )
 
-    seed = cfg.get("training", {}).get("seed", 42)
+    # fixed data seed: the val/test subsample must NOT move with training.seed,
+    # otherwise multi-seed runs are evaluated on different test subsamples.
+    seed = cfg.get("data", {}).get("subsample_seed", 42)
     max_per_class = data_cfg.get("max_samples_per_class")
     if max_per_class is not None:
         train_s = _balance_samples(train_s, all_labels, max_per_class, seed)

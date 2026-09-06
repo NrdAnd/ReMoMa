@@ -1,0 +1,20 @@
+── Test Results ─────────────────────────────────────
+  Model: stgcn_gat | Split: by_file | Params: 186,371
+  F1 Macro (argmax): 0.5658   MCC (argmax): 0.3951
+  F1 Macro (tuned):  0.5975   MCC (tuned):  0.3794   (down>=0.69 up>=0.63 | val_f1=0.606)
+  Accuracy (tuned):  0.8505
+
+              precision    recall  f1-score   support
+
+        down     0.4871    0.4122    0.4465      3120
+        flat     0.9253    0.9027    0.9138     43871
+          up     0.3587    0.5434    0.4321      3009
+
+    accuracy                         0.8505     50000
+   macro avg     0.5904    0.6194    0.5975     50000
+weighted avg     0.8638    0.8505    0.8557     50000
+
+Confusion Matrix:
+[[ 1286  1825     9]
+ [ 1354 39603  2914]
+ [    0  1374  1635]]

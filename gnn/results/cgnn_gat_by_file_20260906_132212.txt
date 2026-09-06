@@ -1,0 +1,20 @@
+── Test Results ─────────────────────────────────────
+  Model: cgnn_gat | Split: by_file | Params: 186,387
+  F1 Macro (argmax): 0.5335   MCC (argmax): 0.3440
+  F1 Macro (tuned):  0.6057   MCC (tuned):  0.3978   (down>=0.53 up>=0.63 | val_f1=0.605)
+  Accuracy (tuned):  0.8387
+
+              precision    recall  f1-score   support
+
+        down     0.4503    0.4962    0.4721      3120
+        flat     0.9336    0.8792    0.9056     43871
+          up     0.3456    0.6025    0.4392      3009
+
+    accuracy                         0.8387     50000
+   macro avg     0.5765    0.6593    0.6057     50000
+weighted avg     0.8681    0.8387    0.8505     50000
+
+Confusion Matrix:
+[[ 1548  1549    23]
+ [ 1888 38573  3410]
+ [    2  1194  1813]]
