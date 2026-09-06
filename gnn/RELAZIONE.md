@@ -37,7 +37,7 @@ Feature per nodo: prezzo normalizzato rispetto al mid, volume discretizzato in q
 
 ## 3. I modelli confrontati
 
-Nove configurazioni, otto delle quali a **budget di parametri comparabile (~180–206k)**, stessa testa di classificazione (mean+max pooling → MLP), stesso training. Le tre architetture si distinguono per **come** (e se) trattano il tempo; le varianti per **quale operatore di grafo** usano.
+**Dodici configurazioni** nostre (più lo STHNN del progetto parallelo, 13 righe in §5e), nove delle quali a **budget di parametri comparabile (~180–206k)**, stessa testa di classificazione (mean+max pooling → MLP), stesso training. Le tre famiglie si distinguono per **come** (e se) trattano il tempo; le varianti per **quale operatore di grafo** usano: 3 famiglie × 3 operatori = 9 configurazioni a budget.
 
 | Famiglia | Trattamento del tempo | Varianti (operatore di grafo) |
 |---|---|---|
@@ -45,7 +45,7 @@ Nove configurazioni, otto delle quali a **budget di parametri comparabile (~180�
 | **CGNN** | CNN 1D sull'asse dei lag → poi grafo | GCN (181k), SAGE (185k), GAT (186k) |
 | **STGCN** | blocchi intercalati [temporale → grafo → temporale] | GCN (183k), SAGE (182k), GAT (186k) |
 
-Più due test di scala fuori budget: **SAGE @272k** e **CGNN @720k**.
+A queste si aggiungono tre **test di scala** fuori budget: **SAGE @272k**, **CGNN-SAGE @273k** e **CGNN @720k**.
 A questi si affianca il progetto parallelo **RecurrentSparseSTHNN** (rete ipergrafica spazio-temporale, stesso task e label), usato come confronto interno.
 
 ## 4. Protocollo sperimentale
@@ -99,6 +99,38 @@ up           4    1492   1513
 ```
 
 Il modello **non confonde quasi mai le due direzioni tra loro**: 5 errori su 6129 campioni direzionali. Gli errori sono quasi tutti verso/da la classe flat, cioè sul *quando* il segnale è abbastanza forte, non sul *dove* va il prezzo. È la struttura d'errore che si vorrebbe in un contesto di trading: il modello sbaglia per prudenza, non per direzione.
+
+### 5e. Tabella comparativa completa
+
+Tutte le configurazioni su `by_file`, con **entrambe le regole di decisione** (argmax e soglie tarate su validation). Ordinamento per F1 tuned. HLOB è inserito nella sua posizione reale in classifica.
+
+| # | Modello | Tempo | Op. | Param | F1 argmax | MCC argmax | F1 tuned | MCC tuned |
+|---|---|---|---|---|---|---|---|---|
+| 1 | **CGNN scalato** | CNN→grafo | GCN | 720k | 0.5209 | 0.3770 | **0.6428** | **0.4483** |
+| 2 | STGCN-SAGE | intercalato | SAGE | 182k | 0.5721 | 0.4096 | 0.6324 | 0.4322 |
+| 3 | STGCN *(3 seed)* | intercalato | GCN | 183k | 0.5695 ± 0.0092 | 0.4045 ± 0.0012 | 0.6282 ± 0.0076 | 0.4286 ± 0.0103 |
+| 4 | CGNN *(3 seed)* | CNN→grafo | GCN | 181k | 0.5412 ± 0.0032 | 0.3881 ± 0.0050 | 0.6259 ± 0.0031 | 0.4235 ± 0.0045 |
+| 5 | SAGE scalato | — | SAGE | 272k | 0.5319 | 0.3733 | 0.6253 | 0.4204 |
+| 6 | CGNN-SAGE scalato | CNN→grafo | SAGE | 273k | 0.5261ᴬ | 0.3787ᴬ | 0.6153ᴬ | 0.4078ᴬ |
+| 7 | STHNN *(prog. parallelo)* | ipergrafo ST | — | — | — | — | 0.6115ᴬ | — |
+| 8 | SAGE | — | SAGE | 182k | 0.5445ᴬ | 0.3844ᴬ | 0.6086ᴬ | 0.3976ᴬ |
+| 9 | CGNN-GAT | CNN→grafo | GAT | 186k | 0.5335 | 0.3440 | 0.6057 | 0.3978 |
+| 10 | CGNN-SAGE | CNN→grafo | SAGE | 185k | 0.5529ᴬ | 0.3803ᴬ | 0.6008ᴬ | 0.3868ᴬ |
+| — | **HLOB** *(benchmark)* | HCNN+LSTM | — | **180k** | n/d † | n/d † | **0.60** | **0.40** |
+| 11 | STGCN-GAT | intercalato | GAT | 186k | 0.5658 | 0.3951 | 0.5975 | 0.3794 |
+| 12 | GAT | — | GAT | 188k | **0.5874**ᴬ | 0.3794ᴬ | 0.5841ᴬ | 0.3710ᴬ |
+| 13 | GCN | — | GCN | 206k | 0.4757ᴬ | 0.3107ᴬ | 0.5715ᴬ | 0.3427ᴬ |
+
+**Il confronto con HLOB è a parametri appaiati.** La Tabella 3 del paper riporta per HLOB **1.8 × 10⁵ ≈ 180k parametri trainabili** — esattamente il nostro budget. Quindi le nove configurazioni a ~180k non solo usano ~30× meno dati, ma hanno anche **la stessa taglia del benchmark**. (Per riferimento, gli altri: BinBTabl 6.6k, BinCTabl 22k, CNN1 35k, Transformer/iTransformer 110k, DeepLOB 140k, DLA 220k, CNN2 280k, LobTransformer 2.0M.) Fa eccezione solo la riga 1, che a 720k è **4× HLOB**: è un test di scala, non un confronto equo.
+
+† Il paper non dichiara la regola di decisione usata in Tabella 5; l'evaluator di LOBFrame calcola le metriche *"as function of probability threshold"*, quindi i valori di HLOB potrebbero già essere soglia-tarati e non argmax puri. Nel dubbio li confrontiamo con la nostra colonna *tuned*, che è l'ipotesi a noi più sfavorevole.
+
+**Osservazioni sulle due regole di decisione:**
+- Il tuning delle soglie vale **+0.05 / +0.12 di F1** su tutti i modelli tranne GAT statica, l'unico caso in cui *peggiora* (0.5874 → 0.5841): le soglie tarate su validation non generalizzano al test. È anche l'unico modello il cui argmax (0.5874) sarebbe il migliore della colonna.
+- **Il ranking cambia tra le due regole.** All'argmax i modelli scalati sono i peggiori (CGNN@720k fa 0.5209, ultimo assoluto) perché più capacità = probabilità più diffuse sulla classe flat; dopo il tuning diventano i migliori. Questo conferma che su classi al ~88% flat l'argmax non è la regola informativa, ed è la ragione per cui riportiamo entrambe.
+- **L'MCC è molto più stabile della F1 tra le due regole** (es. STGCN 0.4045 → 0.4286, +0.024, contro +0.059 di F1): è meno sensibile alla soglia, e quindi il confronto più conservativo con HLOB.
+
+ᴬ = valutato sul sottocampione di test di luglio (support down/up 3219/2925); gli altri su quello di settembre (3120/3009) — due estrazioni da 50k dello stesso giorno, differenza attesa ~±0.005 (vedi §8).
 
 ## 6. Confronto con il benchmark HLOB
 

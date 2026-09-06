@@ -22,3 +22,4 @@ gnn/checkpoints/
 .ipynb_checkpoints/
 gnn/scripts/lr_finder.py
 gnn/scripts/verify_train.py
+*.pptx
