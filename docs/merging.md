@@ -2,7 +2,7 @@
 
 ## Scope and recorded history
 
-The integration branch is `codex/unified-model-pipeline`. It incorporates these fetched source tips:
+The integration branch is `unified-model-pipeline`. It incorporates these fetched source tips:
 
 | Reference | Commit | Role |
 | --- | --- | --- |
@@ -75,11 +75,11 @@ For the recorded source tips, a merge into the integrated descendant is already 
 These commands are instructions for the repository owners; no push is required to prepare the local result.
 
 ```bash
-git switch codex/unified-model-pipeline
+git switch unified-model-pipeline
 git fetch --prune origin
 git merge-base --is-ancestor origin/main HEAD
 git merge-base --is-ancestor origin/AdaptiveRecurrentSparseSTHNN HEAD
-git push -u origin codex/unified-model-pipeline
+git push -u origin unified-model-pipeline
 ```
 
 Open a pull request targeting `main`. To retain the ancestry property, use a **merge commit or fast-forward**, according to branch protection. A squash merge discards the integration commit's parent relationships and therefore loses the proof that both original branch tips are contained. Rebase-merging can likewise rewrite the recorded integration history.
