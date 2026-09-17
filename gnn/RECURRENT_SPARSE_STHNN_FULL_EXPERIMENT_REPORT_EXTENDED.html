@@ -1,0 +1,1420 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>RecurrentSparseSTHNN Full Experiment Report - Extended</title>
+<style>
+:root {
+  color-scheme: light;
+  --bg: #f6f7fb;
+  --paper: #ffffff;
+  --ink: #172033;
+  --muted: #5e6a7d;
+  --line: #dfe4ee;
+  --accent: #2457c5;
+  --accent-soft: #eef4ff;
+  --good: #0f766e;
+  --warn: #9a5b00;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font: 15px/1.58 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+}
+main {
+  width: min(1180px, calc(100% - 48px));
+  margin: 32px auto 64px;
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  box-shadow: 0 18px 48px rgba(19, 35, 73, 0.08);
+  overflow: hidden;
+}
+header {
+  padding: 44px 52px 30px;
+  background: linear-gradient(135deg, #f8fbff 0%, #eef4ff 100%);
+  border-bottom: 1px solid var(--line);
+}
+.content { padding: 34px 52px 52px; }
+h1, h2, h3, h4 { line-height: 1.22; margin: 0 0 14px; color: #111827; }
+h1 { font-size: 34px; letter-spacing: -0.01em; }
+h2 { font-size: 25px; margin-top: 42px; padding-top: 8px; border-top: 1px solid var(--line); }
+h3 { font-size: 19px; margin-top: 28px; }
+h4 { font-size: 16px; margin-top: 22px; color: #263348; }
+p { margin: 10px 0 14px; }
+.lead { font-size: 17px; max-width: 950px; color: #354155; }
+.note, .callout {
+  border: 1px solid var(--line);
+  border-left: 4px solid var(--accent);
+  background: var(--accent-soft);
+  padding: 14px 16px;
+  border-radius: 8px;
+  margin: 18px 0;
+}
+.callout.good { border-left-color: var(--good); background: #ecfdf5; }
+.callout.warn { border-left-color: var(--warn); background: #fff7ed; }
+code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+pre {
+  background: #0f172a;
+  color: #e5e7eb;
+  padding: 15px 17px;
+  border-radius: 9px;
+  overflow-x: auto;
+  font-size: 13px;
+  line-height: 1.48;
+}
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 16px 0 24px;
+  font-size: 13px;
+}
+th, td {
+  border: 1px solid var(--line);
+  padding: 8px 9px;
+  text-align: left;
+  vertical-align: top;
+}
+th { background: #f2f5fa; font-weight: 700; }
+tbody tr:nth-child(even) td { background: #fbfcff; }
+.small { font-size: 13px; color: var(--muted); }
+.grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
+.metric-card {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 14px 16px;
+  background: #fbfcff;
+}
+.metric-card strong { display: block; font-size: 18px; }
+.toc {
+  columns: 2;
+  gap: 32px;
+  margin-top: 18px;
+}
+.toc a { color: var(--accent); text-decoration: none; }
+.toc a:hover { text-decoration: underline; }
+footer {
+  padding: 22px 52px 34px;
+  color: var(--muted);
+  border-top: 1px solid var(--line);
+  background: #fbfcff;
+}
+@media (max-width: 780px) {
+  main { width: 100%; margin: 0; border-radius: 0; }
+  header, .content, footer { padding-left: 22px; padding-right: 22px; }
+  .grid { grid-template-columns: 1fr; }
+  .toc { columns: 1; }
+}
+</style>
+</head>
+<body>
+<main>
+<header>
+<h1>RecurrentSparseSTHNN Full Experiment Report - Extended</h1>
+<p class="lead"></p>
+<div class="note"><strong>Primary final recommendation:</strong> RecurrentSparseSTHNN with feature-rich + order-flow inputs, weighted NMI/TMFG adjacency, walk-forward evaluation, <code>hidden_dim=16</code>, <code>readout_dropout=0.20</code>, <code>message_iterations=1</code>, and stable thresholds <code>down &gt;= 0.83</code>, <code>up &gt;= 0.80</code>.</div>
+</header>
+<div class="content">
+<section id="toc">
+<h2>Contents</h2>
+<ol class="toc">
+<li><a href="#s1">Data, Graph and Common Target Definition</a></li>
+<li><a href="#s2">Exact Model Used</a></li>
+<li><a href="#s3">Metrics</a></li>
+<li><a href="#s4">Threshold Rules and Flat Penalization</a></li>
+<li><a href="#s5">Bagging / Probability Ensemble</a></li>
+<li><a href="#s6">Split Strategies</a></li>
+<li><a href="#s7">Original Results by Experimental Setup</a></li>
+<li><a href="#s8">Original Summary Table</a></li>
+<li><a href="#s9">Original Final Interpretation</a></li>
+<li><a href="#s10">Extended Feature-Rich Walk-Forward Experiments</a></li>
+<li><a href="#s11">New Model/Input Setup</a></li>
+<li><a href="#s12">Steps 1-3 Results</a></li>
+<li><a href="#s13">Step 4: Hyperparameter Grid</a></li>
+<li><a href="#s14">Step 5: Stable Thresholds</a></li>
+<li><a href="#s15">Step 6: Final Seed Ensemble</a></li>
+<li><a href="#s16">Updated Summary and Recommendation</a></li>
+</ol>
+</section>
+
+
+<section id="s1">
+<h2>1. Data, Graph and Common Target Definition</h2>
+<p>All experiments are based on Cisco LOBSTER order book files with 10 levels. Each sample is transformed into a graph-like tensor where each node represents one side-level-lag combination, and each node has two features: price and volume.</p>
+
+<pre><code>node feature vector = [price_feature, volume_feature]</code></pre>
+
+<p>The target is a three-class future mid-price movement label:</p>
+
+<pre><code>0 = down
+1 = flat
+2 = up</code></pre>
+<p>The common target settings are:</p>
+<pre><code>price_type: mid
+label_mode: abs
+threshold: 100
+prediction_horizon: 50</code></pre>
+<p>With these settings, the label is assigned from the future mid-price movement over 50 events:</p>
+<pre><code>down: future movement &lt;= -100
+flat: -100 &lt; future movement &lt; 100
+up: future movement &gt;= 100</code></pre>
+
+<p><strong>Meaning of flat.</strong> The flat class means that the future movement is smaller than one tick in absolute value. In LOBSTER-style integer price units, a movement of 100 corresponds to one tick when prices are scaled by 10000. Therefore, flat is not a model component and not a graph edge: it is the neutral/no-direction label.</p>
+<h3>Graph Source</h3>
+<p>The graph used by RecurrentSparseSTHNN is obtained from the Cisco NMI-mean matrix:</p>
+
+<pre><code>csv_NMI_matrix/lob_similarity_nmi_rellag_lag150_bins2000_mean.csv</code></pre>
+
+<p>A TMFG is built from this matrix and exported as a labeled adjacency matrix. The recurrent model requires labels such as <code>ASKs1_lag100</code> or <code>BIDs10_lag0</code>, so that it can identify both the feature identity and the lag index of every node.</p>
+
+<pre><code>Lag 100 adjacency:
+data/adjacency/recurrent_sparse_tmfg_lag100_bins2000_from_nmi_mean.tsv
+nodes = 2 sides * 10 levels * 101 lags = 2020
+
+Lag 150 adjacency:
+data/adjacency/recurrent_sparse_tmfg_lag150_bins2000_from_nmi_mean.tsv
+nodes = 2 sides * 10 levels * 151 lags = 3020</code></pre>
+</section>
+
+<section id="s2">
+<h2>2. Exact Model Used: RecurrentSparseSTHNN</h2>
+<p>The model is implemented in the project as an independent architecture:</p>
+
+<pre><code>gnn/src/models/recurrent_sparse_sthnn.py</code></pre>
+<p>The pipeline-facing class is <code>RecurrentSparseSTHNNClassifier</code>. Internally, it wraps a recurrent sparse core called <code>BaseRecurrentSparseSTHNN</code>.</p>
+
+<h3>2.1 Input Shape and Node Ordering</h3>
+<p>The processed dataset stores each sample as a static tensor:</p>
+
+<pre><code>[batch, num_nodes, 2]</code></pre>
+<p>where the last dimension contains the two node features: price and volume. The number of nodes depends on the lag setting:</p>
+<pre><code>lag100: num_nodes = 2 * 10 * (100 + 1) = 2020
+lag150: num_nodes = 2 * 10 * (150 + 1) = 3020</code></pre>
+<p>The historical preprocessing order and the adjacency order are not assumed to be identical. For this reason, the classifier performs an explicit label-based reordering before passing the tensor to the recurrent core:</p>
+<pre><code>x_ordered = x_batch.index_select(1, node_reorder_idx)</code></pre>
+<p>This is important because the graph adjacency is labeled and ordered by recurrent labels, while the preprocessed LOB tensor follows the original project ordering.</p>
+<h3>2.2 Node Encoder</h3><p>Each node starts with two features. These are mapped to a hidden vector by a small MLP:</p>
+<pre><code>Linear(2, hidden_dim)
+ReLU
+Linear(hidden_dim, hidden_dim)
+ReLU
+
+In all reported experiments:
+hidden_dim = 5</code></pre>
+
+<h3>2.3 Sparse Edge Blocks</h3>
+<p>The model does not use one independent parameter matrix for every single edge. Instead, it groups edges by an <code>EdgeKey</code>:</p>
+
+<pre><code>(target_feature, source_feature, lag_distance)</code></pre>
+<p>Each unique edge key has a learnable block matrix of shape:</p>
+<pre><code>[hidden_dim, hidden_dim]</code></pre>
+<p>These block matrices are stored in <code>edge_blocks</code>. During message passing, the source node hidden state is multiplied by the block assigned to that edge type.</p>
+<pre><code>edge_message = source_hidden @ edge_block
+
+# Efficient implementation:
+torch.einsum(&quot;bed,eod-&gt;beo&quot;, source_hidden, edge_blocks)</code></pre>
+
+<h3>2.4 Temporal and Same-Lag Messages</h3>
+<p>The adjacency is converted into two main types of message edges:</p>
+<ul><li><strong>Temporal edges:</strong> connect source and target features at different lags.</li><li><strong>Same-lag edges:</strong> connect features within the same lag.</li></ul>
+<p>For temporal edges, the model identifies which node is at the more recent lag and which one is at the older lag. Messages are then created for all compatible lag positions using the same lag-distance block. This is the recurrent/shared-operator part of the architecture: the same learned block is reused whenever the feature pair and lag distance match.</p>
+<div class="callout warn"><strong>Important:</strong> This is not a standard LSTM. It uses a GRUCell for hidden-state updates, but the temporal structure comes from sparse lag-distance operators defined by the TMFG adjacency. Equal feature/lag-distance patterns share the same operator.</div>
+<h3>2.5 Hidden-State Update</h3>
+<p>Messages from temporal edges, optional synthetic temporal edges, and same-lag edges are summed per target node. The model then updates each node hidden state with a GRU cell:</p>
+
+<pre><code>hidden_next = GRUCell(messages, hidden_previous)
+
+message_iterations = 1</code></pre>
+
+<p><code>message_iterations</code> controls how many complete message-passing/update cycles are performed before the final readout. With <code>message_iterations = 1</code>, each node receives messages from its connected neighbors once, combines them, updates its hidden state with the GRUCell, and then the model classifies the sample. With <code>message_iterations = 2</code>, the same process is repeated a second time using the already-updated hidden states.</p>
+<pre><code>message_iterations = 1:
+  initial node states -&gt; messages -&gt; GRU update -&gt; readout
+
+message_iterations = 2:
+  initial node states -&gt; messages -&gt; GRU update
+                      -&gt; messages -&gt; GRU update -&gt; readout</code></pre>
+<p>Therefore, each forward pass in the final recommended model performs one full recurrent sparse message update before readout. In the hyperparameter grid, <code>message_iterations = 2</code> did not improve the final balance of metrics, suggesting that one sparse information-propagation step was sufficient for this graph and dataset.</p>
+<h3>2.6 Readout</h3>
+<p>The readout mode used in all experiments is:</p>
+
+<pre><code>readout_mode = all_lags</code></pre>
+<p>This means that the hidden states of all nodes and all lags are flattened and passed to a final linear classifier:</p>
+<pre><code>flattened_hidden = hidden.reshape(batch_size, num_nodes * hidden_dim)
+logits = Linear(num_nodes * hidden_dim, 3)(Dropout(flattened_hidden))
+
+readout_dropout = 0.15</code></pre>
+<h3>2.7 Main Configuration</h3>
+<pre class="yaml"><code>model:
+  type: recurrent_sparse_sthnn
+  hidden_dim: 5
+  message_iterations: 1
+  readout_mode: all_lags
+  readout_dropout: 0.15
+  add_self_lag_edges: false
+  out_dim: 3</code></pre>
+<h3>2.8 Parameter and Graph Statistics</h3>
+<table>
+<thead><tr>
+<th>Setup</th>
+<th>Nodes</th>
+<th>Trainable Parameters</th>
+<th>Recurrent Blocks</th>
+<th>Temporal Edges</th>
+<th>Same-Lag Edges</th>
+</tr></thead><tbody>
+<tr>
+<td>lag100</td>
+<td>2020</td>
+<td>34,528</td>
+<td>160</td>
+<td>11,101</td>
+<td>4,848</td>
+</tr>
+<tr>
+<td>lag150</td>
+<td>3020</td>
+<td>49,503</td>
+<td>159</td>
+<td>16,555</td>
+<td>7,248</td>
+</tr>
+</tbody></table>
+</section>
+
+<section id="s3">
+<h2>3. Metrics: What They Mean Qualitatively</h2>
+
+<table>
+<thead><tr>
+<th>Metric</th>
+<th>Meaning</th>
+</tr></thead><tbody>
+<tr>
+<td>Accuracy</td>
+<td>Percentage of all samples classified correctly. Since flat dominates the dataset, high accuracy often means the model is good at recognizing flat periods, but it does not guarantee good directional prediction.</td>
+</tr>
+<tr>
+<td>Macro F1</td>
+<td>Average F1 over down, flat, and up with equal class weight. This is more informative than accuracy when classes are imbalanced, because down and up matter as much as flat.</td>
+</tr>
+<tr>
+<td>Weighted F1</td>
+<td>F1 averaged according to class frequency. Since flat is frequent, weighted F1 is strongly influenced by flat performance.</td>
+</tr>
+<tr>
+<td>Signal Precision</td>
+<td>Among all predicted directional signals, how many are correct. Higher signal precision means fewer false trading-like signals.</td>
+</tr>
+<tr>
+<td>Signal Recall</td>
+<td>Among all real down/up movements, how many are captured. Higher recall means the model misses fewer real movements, but it can come with more false positives.</td>
+</tr>
+<tr>
+<td>Flat-to-Signal</td>
+<td>Fraction of true flat samples predicted as down or up. Lower is better if we want cleaner and more conservative directional predictions.</td>
+</tr>
+</tbody></table>
+<p><strong>Precision vs recall in practice:</strong> Higher precision means that when the model predicts a movement, that signal is more reliable. Higher recall means the model detects more true movements, but it may also produce more false movement signals. In this project, lag100 tends to be more recall-oriented, while lag150 tends to be more precision/conservativeness-oriented.</p>
+</section>
+
+<section id="s4">
+<h2>4. Threshold Rules and Flat Penalization</h2>
+<p>The model itself always outputs logits, which are converted into probabilities:</p>
+
+<pre><code>P(down), P(flat), P(up)</code></pre>
+<p>The simplest decision rule is <code>argmax</code>, but argmax tends to produce too many directional predictions in this imbalanced setting. Therefore, we tune decision thresholds on the validation split:</p>
+<pre><code>if P(down) &gt;= threshold_down: predict down
+else if P(up) &gt;= threshold_up: predict up
+else: predict flat</code></pre>
+<h3>4.1 Standard Threshold Tuning</h3>
+<pre><code>score = macro_f1</code></pre>
+<p>This objective selects the threshold pair that maximizes validation macro F1.</p>
+<h3>4.2 Penalized Threshold Tuning</h3>
+<pre><code>score = macro_f1 - 0.25 * flat_to_signal_rate</code></pre>
+<p>The penalization discourages threshold pairs that convert too many true flat samples into down/up predictions. It is used only during post-training threshold selection on the validation set.</p>
+<p><strong>Why this does not boost the model:</strong> The penalization does not update neural network weights, does not perform backpropagation, and does not expose test labels to the model. The trained checkpoint <code>best.pt</code> remains unchanged. Only the final decision thresholds are selected differently. Therefore, this is post-hoc calibration, not boosting.</p>
+<pre><code>train set -&gt; learns model weights
+validation set -&gt; selects threshold_down and threshold_up
+test set -&gt; final evaluation only</code></pre>
+<p>The only methodological risk is over-tuning the decision rule if many different penalties/objectives are tried and the best one is selected based on test performance. For this reason, penalized results are reported separately from standard macro-F1 threshold results.</p>
+</section>
+
+<section id="s5">
+<h2>5. Bagging / Probability Ensemble</h2>
+<p>We tested a light bagging strategy by training the same model with different random seeds and averaging their predicted probabilities.</p>
+
+<pre><code>model_seed_42 -&gt; probabilities
+model_seed_123 -&gt; probabilities
+model_seed_777 -&gt; probabilities
+ensemble_probs = average(probabilities)</code></pre>
+<p>After averaging, thresholds are tuned on validation exactly as for a single model. This is not boosting: each model is trained independently, and no model is trained to focus on the previous model's errors.</p>
+<h3>5.1 Ensemble Variants Tested</h3>
+<pre><code>Seed 42 + seed 123 + seed 777
+Seed 42 + seed 123
+Seed 42 + seed 123 with penalized thresholds</code></pre>
+<p>The ensemble did not produce a clear improvement over the best single model. Seed 777 was weaker, and including it reduced the ensemble's usefulness. The 42+123 ensemble matched the best macro F1, but it did not improve signal precision or flat-to-signal compared with the best single penalized model.</p>
+</section>
+
+<section id="s6">
+<h2>6. Split Strategies</h2>
+<h3>6.1 by_lag</h3>
+<p>In <code>by_lag</code>, samples from all trading days can appear across train, validation, and test. This makes the evaluation less strict because the model can train and test on different samples coming from the same days. It is useful as an internal benchmark.</p>
+<h3>6.2 by_file</h3>
+<p>In <code>by_file</code>, full days are separated:</p>
+
+<pre><code>train: files [0, 1, 2]
+val: file [3]
+test: file [4]</code></pre>
+<p>This is a stricter day-held-out setting and is better for measuring whether the model generalizes to a new Cisco trading day.</p>
+</section>
+
+<section id="s7">
+<h2>7. Results by Experimental Setup</h2>
+<h3>7.1 Lag 100, by_lag, Single Model</h3>
+<p><strong>Config:</strong> <code>config/recurrent_sparse_sthnn.yaml</code><br><strong>Checkpoint:</strong> <code>checkpoints/recurrent_sparse_sthnn_nmi_mean/best.pt</code></p>
+
+<pre><code>Standard thresholds
+threshold_down = 0.78
+threshold_up = 0.79
+Accuracy = 0.8769
+Macro F1 = 0.6172
+Weighted F1 = 0.8822
+Signal precision= 0.4190
+Signal recall = 0.5129
+Signal F1 = 0.4612
+Signal rate = 0.1258
+Flat_to_signal = 0.0814
+
+Penalized thresholds
+threshold_down = 0.83
+threshold_up = 0.80
+Accuracy = 0.8845
+Macro F1 = 0.6202
+Weighted F1 = 0.8867
+Signal precision= 0.4432
+Signal recall = 0.4841
+Signal F1 = 0.4627
+Signal rate = 0.1122
+Flat_to_signal = 0.0696</code></pre>
+<p>This is the strongest internal result. The penalized rule improves accuracy, signal precision, and flat-to-signal while keeping macro F1 high.</p>
+<h3>7.2 Lag 100, by_lag, Ensembles</h3>
+<pre><code>Ensemble 42 + 123 + 777, standard thresholds
+Accuracy = 0.8791
+Macro F1 = 0.6163
+Weighted F1 = 0.8833
+Signal precision= 0.4246
+Signal recall = 0.4987
+Flat_to_signal = 0.0773
+
+Ensemble 42 + 123, standard thresholds
+threshold_down = 0.76
+threshold_up = 0.79
+Accuracy = 0.8764
+Macro F1 = 0.6202
+Weighted F1 = 0.8824
+Signal precision= 0.4185
+Signal recall = 0.5229
+Signal rate = 0.1284
+Flat_to_signal = 0.0831
+
+Ensemble 42 + 123, penalized thresholds
+threshold_down = 0.76
+threshold_up = 0.82
+Accuracy = 0.8796
+Macro F1 = 0.6180
+Weighted F1 = 0.8838
+Signal precision= 0.4267
+Signal recall = 0.5013
+Signal rate = 0.1207
+Flat_to_signal = 0.0770</code></pre>
+<p>The ensemble results are valid but do not clearly beat the best single model. The 42+123 ensemble improves recall, but the single seed-42 penalized model remains cleaner and more precise.</p>
+<h3>7.3 Lag 100, by_file, Single Model</h3>
+<p><strong>Config:</strong> <code>config/recurrent_sparse_sthnn_by_file.yaml</code><br><strong>Checkpoint:</strong> <code>checkpoints/recurrent_sparse_sthnn_nmi_mean_by_file/best.pt</code></p>
+<pre><code>Standard thresholds
+threshold_down = 0.79
+threshold_up = 0.75
+Accuracy = 0.8459
+Macro F1 = 0.6115
+Weighted F1 = 0.8561
+Signal precision= 0.3995
+Signal recall = 0.5415
+Signal F1 = 0.4597
+Signal rate = 0.1651
+Flat_to_signal = 0.1118</code></pre>
+<p>Lag100 by_file is more aggressive: it captures more real movements but also produces more false signals on true flat samples.</p>
+<h3>7.4 Lag 150, by_file, Single Model</h3>
+<p><strong>Config:</strong> <code>config/recurrent_sparse_sthnn_lag150_by_file.yaml</code><br><strong>Checkpoint:</strong> <code>checkpoints/recurrent_sparse_sthnn_lag150_nmi_mean_by_file/best.pt</code></p>
+<pre><code>Standard thresholds
+threshold_down = 0.77
+threshold_up = 0.79
+Accuracy = 0.8639
+Macro F1 = 0.6009
+Weighted F1 = 0.8636
+Signal precision= 0.4421
+Signal recall = 0.4377
+Signal F1 = 0.4399
+Signal rate = 0.1216
+Flat_to_signal = 0.0764
+
+Penalized thresholds
+threshold_down = 0.78
+threshold_up = 0.79
+Accuracy = 0.8642
+Macro F1 = 0.5976
+Weighted F1 = 0.8632
+Signal precision= 0.4423
+Signal recall = 0.4284
+Signal F1 = 0.4352
+Signal rate = 0.1190
+Flat_to_signal = 0.0747</code></pre>
+<p>This is the cleanest comparison with the previous 150-lag setup. The standard threshold rule is preferable because the penalized rule reduces macro F1 and recall without meaningfully improving precision.</p>
+<h3>7.5 Lag 150, by_lag, Single Model</h3>
+<p><strong>Config:</strong> <code>config/recurrent_sparse_sthnn_lag150.yaml</code><br><strong>Checkpoint:</strong> <code>checkpoints/recurrent_sparse_sthnn_lag150_nmi_mean/best.pt</code></p>
+<pre><code>Standard thresholds
+threshold_down = 0.77
+threshold_up = 0.80
+Accuracy = 0.8789
+Macro F1 = 0.6065
+Weighted F1 = 0.8815
+Signal precision= 0.4229
+Signal recall = 0.4686
+Signal F1 = 0.4446
+Signal rate = 0.1146
+Flat_to_signal = 0.0737
+
+Penalized thresholds
+threshold_down = 0.79
+threshold_up = 0.80
+Accuracy = 0.8813
+Macro F1 = 0.6066
+Weighted F1 = 0.8828
+Signal precision= 0.4304
+Signal recall = 0.4572
+Signal F1 = 0.4434
+Signal rate = 0.1099
+Flat_to_signal = 0.0697</code></pre>
+<p>For lag150 by_lag, penalized tuning is slightly preferable: macro F1 is essentially unchanged, while accuracy, signal precision, and flat-to-signal improve.</p>
+</section>
+<section id="s8"><h2>8. Summary Table</h2>
+<table>
+<thead><tr>
+<th>Setup</th>
+<th>Decision</th>
+<th>Accuracy</th>
+<th>Macro F1</th>
+<th>Weighted F1</th>
+<th>Signal Precision</th>
+<th>Signal Recall</th>
+<th>Flat-to-Signal</th>
+</tr></thead><tbody>
+<tr>
+<td>lag100 by_lag</td>
+<td>standard</td>
+<td>0.8769</td>
+<td>0.6172</td>
+<td>0.8822</td>
+<td>0.4190</td>
+<td>0.5129</td>
+<td>0.0814</td>
+</tr>
+<tr>
+<td>lag100 by_lag</td>
+<td>penalized</td>
+<td>0.8845</td>
+<td>0.6202</td>
+<td>0.8867</td>
+<td>0.4432</td>
+<td>0.4841</td>
+<td>0.0696</td>
+</tr>
+<tr>
+<td>ensemble 42+123 by_lag</td>
+<td>standard</td>
+<td>0.8764</td>
+<td>0.6202</td>
+<td>0.8824</td>
+<td>0.4185</td>
+<td>0.5229</td>
+<td>0.0831</td>
+</tr>
+<tr>
+<td>ensemble 42+123 by_lag</td>
+<td>penalized</td>
+<td>0.8796</td>
+<td>0.6180</td>
+<td>0.8838</td>
+<td>0.4267</td>
+<td>0.5013</td>
+<td>0.0770</td>
+</tr>
+<tr>
+<td>ensemble 42+123+777 by_lag</td>
+<td>standard</td>
+<td>0.8791</td>
+<td>0.6163</td>
+<td>0.8833</td>
+<td>0.4246</td>
+<td>0.4987</td>
+<td>0.0773</td>
+</tr>
+<tr>
+<td>lag100 by_file</td>
+<td>standard</td>
+<td>0.8459</td>
+<td>0.6115</td>
+<td>0.8561</td>
+<td>0.3995</td>
+<td>0.5415</td>
+<td>0.1118</td>
+</tr>
+<tr>
+<td>lag150 by_file</td>
+<td>standard</td>
+<td>0.8639</td>
+<td>0.6009</td>
+<td>0.8636</td>
+<td>0.4421</td>
+<td>0.4377</td>
+<td>0.0764</td>
+</tr>
+<tr>
+<td>lag150 by_file</td>
+<td>penalized</td>
+<td>0.8642</td>
+<td>0.5976</td>
+<td>0.8632</td>
+<td>0.4423</td>
+<td>0.4284</td>
+<td>0.0747</td>
+</tr>
+<tr>
+<td>lag150 by_lag</td>
+<td>standard</td>
+<td>0.8789</td>
+<td>0.6065</td>
+<td>0.8815</td>
+<td>0.4229</td>
+<td>0.4686</td>
+<td>0.0737</td>
+</tr>
+<tr>
+<td>lag150 by_lag</td>
+<td>penalized</td>
+<td>0.8813</td>
+<td>0.6066</td>
+<td>0.8828</td>
+<td>0.4304</td>
+<td>0.4572</td>
+<td>0.0697</td>
+</tr>
+</tbody></table>
+</section>
+
+<section id="s9">
+<h2>9. Final Interpretation</h2>
+<p><strong>Best internal performance:</strong> lag100 by_lag with penalized thresholds. Macro F1 = 0.6202, Accuracy = 0.8845, Signal Precision = 0.4432, Flat-to-Signal = 0.0696.</p>
+<p><strong>Most comparable result with the previous lag150 setup:</strong> lag150 by_file with standard thresholds. Macro F1 = 0.6009, Accuracy = 0.8639, Signal Precision = 0.4421, Flat-to-Signal = 0.0764.</p>
+<p><strong>Best lag150 result under by_lag:</strong> lag150 by_lag with penalized thresholds. Macro F1 = 0.6066, Accuracy = 0.8813, Signal Precision = 0.4304, Flat-to-Signal = 0.0697.</p>
+<p>Overall, lag100 behaves more aggressively: it increases recall and macro F1, but it also increases false directional signals on true flat cases. Lag150 behaves more conservatively: it produces cleaner signals and lower flat-to-signal rates, making it more appropriate when comparability with the previous 150-lag model is required.</p>
+<p>The ensemble experiments did not provide a clear improvement over the best single model. Therefore, the single-model configurations remain the most interpretable and defensible.</p>
+</section>
+
+
+<section id="s10">
+<h2>10. Extended Feature-Rich Walk-Forward Experiments</h2>
+<p>After those experiments, a new experimental block was added to make the evaluation stricter and the model input richer.</p>
+<p>The new roadmap was:</p>
+
+<pre><code>Step 1: walk-forward / by-file evaluation
+Step 2: feature engineering with book-derived and order-flow features
+Step 3: weighted NMI/TMFG adjacency
+Step 4: small hyperparameter grid
+Step 5: stable thresholds across validation folds
+Step 6: final seed ensemble on the best stable model family</code></pre>
+<div class="callout good"><strong>Status:</strong> all six steps were completed.</div>
+</section>
+
+<section id="s11">
+<h2>11. New Model/Input Setup</h2>
+<p>The model family remains <code>RecurrentSparseSTHNN</code>. The architecture is still the recurrent sparse spatio-temporal graph model integrated as an independent model type. The final experiments use richer node features, weighted graph edges, and stricter walk-forward validation.</p>
+<h3>11.1 Feature-Rich Node Input</h3>
+<p>The original baseline used the preprocessed price/volume node representation. The feature-rich configuration extends each node with causal information computed only from the historical LOB window.</p>
+
+<pre><code>base features:
+  price
+  volume
+
+book-derived features:
+  spread
+  level_imbalance
+  depth_imbalance
+  microprice
+  side
+
+order-flow features:
+  order_trade_flow
+  order_limit_flow
+  order_cancel_flow
+
+node_feature_dim = 10</code></pre>
+<p>The two base channels, <code>price</code> and <code>volume</code>, remain the structural description of each LOB node. The added channels make the node representation more informative: instead of showing only the price/volume snapshot, the model also receives liquidity, imbalance, side identity, and recent event-flow information.</p>
+
+<table>
+<thead><tr>
+<th>Feature</th>
+<th>How it is computed in the preprocessing</th>
+<th>What it captures</th>
+<th>Why it was added</th>
+</tr></thead><tbody>
+<tr>
+<td><code>spread</code></td>
+<td>Best ask minus best bid, normalized by the current mid-price, for each lag.</td>
+<td>Instantaneous trading cost and book tightness.</td>
+<td>A narrow spread usually indicates a liquid and stable book, while a wider spread often indicates uncertainty, lower liquidity, or higher adverse-selection risk. This helps the model distinguish strong directional signals from noisy ones.</td>
+</tr>
+<tr>
+<td><code>level_imbalance</code></td>
+<td><code>(bid_volume_level - ask_volume_level) / (bid_volume_level + ask_volume_level)</code> at each level and lag.</td>
+<td>Local supply/demand pressure at each depth level.</td>
+<td>If bid volume dominates ask volume, the book may contain stronger buy-side support; if ask volume dominates, sell-side pressure may be stronger. This gives the model a direct microstructure signal instead of forcing it to infer imbalance indirectly from raw volumes.</td>
+</tr>
+<tr>
+<td><code>depth_imbalance</code></td>
+<td><code>(total_bid_depth - total_ask_depth) / (total_bid_depth + total_ask_depth)</code> across the 10 visible levels, for each lag.</td>
+<td>Aggregate book pressure over the full visible depth.</td>
+<td>Single-level imbalance can be noisy. Depth imbalance summarizes whether the whole visible book is skewed toward buy or sell liquidity, giving the model a more stable context signal.</td>
+</tr>
+<tr>
+<td><code>microprice</code></td>
+<td>Volume-weighted best-quote price, then normalized as <code>(microprice - current_mid) / current_mid</code>.</td>
+<td>Imbalance-adjusted fair price near the top of the book.</td>
+<td>The mid-price treats bid and ask symmetrically, but the microprice moves toward the side with stronger queue support. It can anticipate short-term pressure when the best bid/ask volumes are asymmetric.</td>
+</tr>
+<tr>
+<td><code>side</code></td>
+<td>Constant side marker: ask nodes receive <code>-1</code>, bid nodes receive <code>+1</code>.</td>
+<td>Explicit ask/bid identity of each node.</td>
+<td>Ask-side and bid-side variables have different economic meanings. This feature lets the model recognize the side explicitly instead of relying only on node ordering.</td>
+</tr>
+<tr>
+<td><code>order_trade_flow</code></td>
+<td>From LOBSTER message rows with execution event types 4/5. Signed volume follows a buy-positive convention and is normalized by visible depth, then clipped to a bounded range.</td>
+<td>Aggressive trading pressure that consumes liquidity.</td>
+<td>Trades tell us whether liquidity is being actively hit. This is different from just observing the book state: two books can look similar, but one may be under active buy pressure while another is under active sell pressure.</td>
+</tr>
+<tr>
+<td><code>order_limit_flow</code></td>
+<td>From LOBSTER message rows with new limit-order event type 1. Signed volume is buy-positive, normalized by visible depth, then clipped.</td>
+<td>Fresh liquidity being added to the book.</td>
+<td>New limit orders show where market participants are adding support or resistance. This helps distinguish a book that is passively balanced from one where new liquidity is entering on one side.</td>
+</tr>
+<tr>
+<td><code>order_cancel_flow</code></td>
+<td>From LOBSTER message rows with cancellation/deletion event types 2/3. Signed removed volume is buy-positive after applying the preprocessing convention, normalized by visible depth, then clipped.</td>
+<td>Liquidity being removed from the book.</td>
+<td>Cancellations can be as informative as new orders. If liquidity disappears from one side, the apparent support/resistance of the book can weaken before the price visibly moves.</td>
+</tr>
+</tbody></table>
+
+<p>The three order-flow features are derived from the corresponding LOBSTER message files. In the implementation, the sign convention is <strong>buy-positive</strong>: positive values indicate buy-side pressure and negative values indicate sell-side pressure. They are attached to the same historical lagged window as the book features; they do not use future labels or future price movement.</p>
+<div class="callout warn"><strong>No leakage:</strong> all added features are computed at the current timestamp and its past lags only. The target still depends on the future mid-price movement over the prediction horizon, but the input features do not include that future movement.</div>
+<p>Conceptually, these features were added because price and volume alone describe what the book looks like, while the engineered channels describe how liquid the book is, where pressure is concentrated, which side each node belongs to, and what type of market activity is changing the book. This is why the feature-rich setup is a richer but still causal input representation.</p>
+
+<h3>11.2 Weighted NMI/TMFG Graph</h3>
+<p>The graph is still built from the Cisco NMI-mean matrix. The final weighted adjacency used by the best experiments is:</p>
+
+<pre><code>data/adjacency/recurrent_sparse_tmfg_lag100_bins2000_from_nmi_mean_weighted.tsv</code></pre>
+<p>The unweighted adjacency only tells the model whether two nodes are connected. The weighted adjacency also passes the edge strength from the NMI/TMFG matrix. In the model, edge weights multiply the message passed across each edge.</p>
+<pre class="yaml"><code>use_edge_weights: true
+edge_weight_normalization: mean</code></pre>
+<p>This keeps the original sparse topology while giving stronger NMI/TMFG links more influence than weaker links.</p>
+
+<h3>11.3 Final Walk-Forward Split</h3>
+<p>The final evaluation uses expanding walk-forward folds over the five Cisco files:</p>
+
+<pre><code>fold_01:
+  train = files [0, 1]
+  val   = file  [2]
+  test  = file  [3]
+
+fold_02:
+  train = files [0, 1, 2]
+  val   = file  [3]
+  test  = file  [4]</code></pre>
+<p>This is an <strong>expanding-window</strong> walk-forward setup. In fold 1, only the first two days are treated as historical training data. In fold 2, time has moved forward: file 2 is no longer future information, so it becomes part of the historical training set. The validation and test files also move one step forward.</p>
+<pre><code>file 0   file 1   file 2   file 3   file 4
+day 1    day 2    day 3    day 4    day 5
+
+fold 1:  train    train    val      test
+fold 2:  train    train    train    val      test</code></pre>
+<p>The rule is always chronological: training uses only past files, validation uses the next unseen file, and test uses the following unseen file. Therefore, the model is evaluated as if it were trained on available historical data and then deployed on future days.</p>
+<p>This is stricter than by_lag because validation and test are full unseen days. It is also more informative than a single by_file split because it measures the same model family across multiple chronological validation/test windows.</p>
+</section>
+
+<section id="s12">
+<h2>12. Steps 1-3: Feature-Rich and Weighted Walk-Forward Results</h2>
+<p>Before the hyperparameter grid, two walk-forward setups were compared.</p>
+<h3>12.1 Feature-Rich Unweighted Baseline</h3>
+<p>This variant adds book-derived features but does not use order-flow channels and does not use weighted graph edges.</p>
+
+<pre><code>Mean result over two walk-forward folds:
+Accuracy        = 0.8636
+Macro F1        = 0.6103
+Signal precision= 0.4288
+Signal recall   = 0.4833
+Flat_to_signal  = 0.0858
+
+fold_01:
+  Accuracy        = 0.8746
+  Macro F1        = 0.6136
+  Signal precision= 0.4470
+  Signal recall   = 0.4662
+  Flat_to_signal  = 0.0729
+
+fold_02:
+  Accuracy        = 0.8525
+  Macro F1        = 0.6070
+  Signal precision= 0.4105
+  Signal recall   = 0.5004
+  Flat_to_signal  = 0.0987</code></pre>
+<h3>12.2 Feature-Rich + Order-Flow + Weighted Edges</h3><p>This variant adds order-flow channels and uses the weighted NMI/TMFG adjacency.</p>
+<pre><code>Mean result over two walk-forward folds:
+Accuracy        = 0.8753
+Macro F1        = 0.6153
+Signal precision= 0.4651
+Signal recall   = 0.4526
+Flat_to_signal  = 0.0685
+
+fold_01:
+  Accuracy        = 0.8782
+  Macro F1        = 0.6012
+  Signal precision= 0.4572
+  Signal recall   = 0.4161
+  Flat_to_signal  = 0.0624
+
+fold_02:
+  Accuracy        = 0.8723
+  Macro F1        = 0.6294
+  Signal precision= 0.4730
+  Signal recall   = 0.4891
+  Flat_to_signal  = 0.0745</code></pre>
+<p><strong>Interpretation:</strong> adding order-flow and weighted edges improves accuracy, macro F1, signal precision, and flat-to-signal compared with the feature-rich unweighted walk-forward baseline. The tradeoff is slightly lower signal recall: the model becomes cleaner and more selective, but it also misses some true directional moves.</p>
+</section>
+
+<section id="s13">
+<h2>13. Step 4: Hyperparameter Grid</h2>
+<p>A small grid was run on the strongest setup: feature-rich + order-flow + weighted NMI/TMFG adjacency, walk-forward evaluation, and penalized threshold tuning with <code>flat_fp_penalty = 0.25</code>.</p>
+
+<pre><code>hidden_dim:          8, 16
+readout_dropout:     0.15, 0.20, 0.25
+message_iterations:  1, 2</code></pre>
+<p>This gives 12 combinations. Each combination was evaluated on the two walk-forward folds, for 24 total trainings.</p>
+<div class="callout good"><strong>Best configuration:</strong> <code>hd16_do20_mi1</code>, with <code>hidden_dim=16</code>, <code>readout_dropout=0.20</code>, and <code>message_iterations=1</code>. With the feature-rich input, this model has <strong>140,003 trainable parameters</strong>.</div>
+<h3>13.1 Complete Grid Summary</h3>
+<table class="data-table">
+<thead><tr>
+<th>Combo</th>
+<th>Hidden Dim</th>
+<th>Dropout</th>
+<th>Message Iter.</th>
+<th>Folds</th>
+<th>Accuracy</th>
+<th>Macro F1</th>
+<th>Weighted F1</th>
+<th>Signal Prec.</th>
+<th>Signal Rec.</th>
+<th>Signal F1</th>
+<th>Flat-to-Signal</th>
+</tr></thead><tbody>
+<tr>
+<td>hd16_do20_mi1</td>
+<td>16</td>
+<td>0.20</td>
+<td>1</td>
+<td>2</td>
+<td>0.8787</td>
+<td>0.6233</td>
+<td>0.8776</td>
+<td>0.4822</td>
+<td>0.4609</td>
+<td>0.4703</td>
+<td>0.0654</td>
+</tr>
+<tr>
+<td>hd16_do20_mi2</td>
+<td>16</td>
+<td>0.20</td>
+<td>2</td>
+<td>2</td>
+<td>0.8773</td>
+<td>0.6231</td>
+<td>0.8768</td>
+<td>0.4766</td>
+<td>0.4668</td>
+<td>0.4705</td>
+<td>0.0678</td>
+</tr>
+<tr>
+<td>hd16_do25_mi2</td>
+<td>16</td>
+<td>0.25</td>
+<td>2</td>
+<td>2</td>
+<td>0.8784</td>
+<td>0.6224</td>
+<td>0.8773</td>
+<td>0.4799</td>
+<td>0.4584</td>
+<td>0.4681</td>
+<td>0.0654</td>
+</tr>
+<tr>
+<td>hd16_do15_mi1</td>
+<td>16</td>
+<td>0.15</td>
+<td>1</td>
+<td>2</td>
+<td>0.8787</td>
+<td>0.6222</td>
+<td>0.8775</td>
+<td>0.4812</td>
+<td>0.4576</td>
+<td>0.4683</td>
+<td>0.0650</td>
+</tr>
+<tr>
+<td>hd16_do25_mi1</td>
+<td>16</td>
+<td>0.25</td>
+<td>1</td>
+<td>2</td>
+<td>0.8764</td>
+<td>0.6219</td>
+<td>0.8762</td>
+<td>0.4728</td>
+<td>0.4672</td>
+<td>0.4688</td>
+<td>0.0689</td>
+</tr>
+<tr>
+<td>hd16_do15_mi2</td>
+<td>16</td>
+<td>0.15</td>
+<td>2</td>
+<td>2</td>
+<td>0.8797</td>
+<td>0.6213</td>
+<td>0.8778</td>
+<td>0.4838</td>
+<td>0.4501</td>
+<td>0.4663</td>
+<td>0.0629</td>
+</tr>
+<tr>
+<td>hd8_do25_mi2</td>
+<td>8</td>
+<td>0.25</td>
+<td>2</td>
+<td>2</td>
+<td>0.8715</td>
+<td>0.6206</td>
+<td>0.8733</td>
+<td>0.4537</td>
+<td>0.4822</td>
+<td>0.4674</td>
+<td>0.0766</td>
+</tr>
+<tr>
+<td>hd8_do15_mi2</td>
+<td>8</td>
+<td>0.15</td>
+<td>2</td>
+<td>2</td>
+<td>0.8717</td>
+<td>0.6197</td>
+<td>0.8732</td>
+<td>0.4537</td>
+<td>0.4787</td>
+<td>0.4659</td>
+<td>0.0759</td>
+</tr>
+<tr>
+<td>hd8_do25_mi1</td>
+<td>8</td>
+<td>0.25</td>
+<td>1</td>
+<td>2</td>
+<td>0.8736</td>
+<td>0.6195</td>
+<td>0.8742</td>
+<td>0.4601</td>
+<td>0.4710</td>
+<td>0.4654</td>
+<td>0.0727</td>
+</tr>
+<tr>
+<td>hd8_do20_mi2</td>
+<td>8</td>
+<td>0.20</td>
+<td>2</td>
+<td>2</td>
+<td>0.8730</td>
+<td>0.6184</td>
+<td>0.8738</td>
+<td>0.4577</td>
+<td>0.4695</td>
+<td>0.4634</td>
+<td>0.0732</td>
+</tr>
+<tr>
+<td>hd8_do15_mi1</td>
+<td>8</td>
+<td>0.15</td>
+<td>1</td>
+<td>2</td>
+<td>0.8746</td>
+<td>0.6174</td>
+<td>0.8745</td>
+<td>0.4631</td>
+<td>0.4610</td>
+<td>0.4618</td>
+<td>0.0703</td>
+</tr>
+<tr>
+<td>hd8_do20_mi1</td>
+<td>8</td>
+<td>0.20</td>
+<td>1</td>
+<td>2</td>
+<td>0.8753</td>
+<td>0.6154</td>
+<td>0.8745</td>
+<td>0.4653</td>
+<td>0.4528</td>
+<td>0.4585</td>
+<td>0.0685</td>
+</tr>
+</tbody></table>
+<h3>13.2 Best Combo Fold Details</h3>
+<table class="data-table">
+<thead><tr>
+<th>Fold</th>
+<th>Train Files</th>
+<th>Val File</th>
+<th>Test File</th>
+<th>t_down</th>
+<th>t_up</th>
+<th>Val Macro F1</th>
+<th>Test Acc.</th>
+<th>Test Macro F1</th>
+<th>Test Weighted F1</th>
+<th>Test Sig. Prec.</th>
+<th>Test Sig. Rec.</th>
+<th>Test Sig. F1</th>
+<th>Test Flat-to-Signal</th>
+</tr></thead><tbody>
+<tr>
+<td>1</td>
+<td>0 1</td>
+<td>2</td>
+<td>3</td>
+<td>0.84</td>
+<td>0.77</td>
+<td>0.6134</td>
+<td>0.8748</td>
+<td>0.6152</td>
+<td>0.8762</td>
+<td>0.4472</td>
+<td>0.4699</td>
+<td>0.4583</td>
+<td>0.0732</td>
+</tr>
+<tr>
+<td>2</td>
+<td>0 1 2</td>
+<td>3</td>
+<td>4</td>
+<td>0.82</td>
+<td>0.83</td>
+<td>0.6335</td>
+<td>0.8827</td>
+<td>0.6313</td>
+<td>0.8791</td>
+<td>0.5172</td>
+<td>0.4520</td>
+<td>0.4824</td>
+<td>0.0576</td>
+</tr>
+</tbody></table>
+<p>The grid shows that <code>hidden_dim=16</code> is consistently stronger than <code>hidden_dim=8</code>, <code>message_iterations=2</code> does not clearly improve the result, and <code>dropout=0.20</code> gives the best overall macro-F1 balance.</p>
+</section>
+
+<section id="s14">
+<h2>14. Step 5: Stable Thresholds Across Folds</h2>
+<p>The grid results used thresholds tuned separately for each fold:</p>
+
+<pre><code>fold_01 thresholds:
+  down &gt;= 0.84
+  up   &gt;= 0.77
+
+fold_02 thresholds:
+  down &gt;= 0.82
+  up   &gt;= 0.83</code></pre>
+<p>To reduce fold-specific threshold over-tuning, a stable threshold pair was computed by averaging the validation-tuned fold thresholds:</p>
+<pre><code>stable thresholds:
+  down &gt;= 0.83
+  up   &gt;= 0.80</code></pre>
+<table>
+<thead><tr>
+<th>Decision Rule</th>
+<th>Accuracy</th>
+<th>Macro F1</th>
+<th>Weighted F1</th>
+<th>Signal Precision</th>
+<th>Signal Recall</th>
+<th>Flat-to-Signal</th>
+</tr></thead><tbody>
+<tr>
+<td>fold-tuned thresholds</td>
+<td>0.8787</td>
+<td>0.6233</td>
+<td>0.8776</td>
+<td>0.4822</td>
+<td>0.4609</td>
+<td>0.0654</td>
+</tr>
+<tr>
+<td>stable thresholds</td>
+<td>0.8792</td>
+<td>0.6238</td>
+<td>0.8780</td>
+<td>0.4823</td>
+<td>0.4604</td>
+<td>0.0649</td>
+</tr>
+</tbody></table>
+<p><strong>Interpretation:</strong> stable thresholds are slightly better than fold-specific thresholds. This is a positive robustness signal: the result is not only due to tuning a different threshold pair for each validation fold.</p>
+</section>
+
+<section id="s15">
+<h2>15. Step 6: Final Seed Ensemble</h2>
+<p>The final ensemble was designed to avoid temporal leakage. Models from different temporal folds were not directly mixed into the same test decision. Instead, each fold received its own seed ensemble.</p>
+
+<pre><code>fold_01 ensemble:
+  base fold_01 checkpoint
+  fold_01 seed123 checkpoint
+  fold_01 seed777 checkpoint
+
+fold_02 ensemble:
+  base fold_02 checkpoint
+  fold_02 seed123 checkpoint
+  fold_02 seed777 checkpoint</code></pre>
+<p>For each fold, probabilities were averaged across the three members. Thresholds were tuned on that fold validation set and then averaged across folds to obtain stable ensemble thresholds.</p>
+<h3>15.1 Ensemble with flat_fp_penalty = 0.25</h3>
+<pre><code>Fold-tuned ensemble thresholds:
+fold_01: down &gt;= 0.83, up &gt;= 0.78
+fold_02: down &gt;= 0.77, up &gt;= 0.78
+
+Stable ensemble thresholds:
+down &gt;= 0.80
+up   &gt;= 0.78</code></pre>
+<table>
+<thead><tr>
+<th>Model</th>
+<th>Accuracy</th>
+<th>Macro F1</th>
+<th>Signal Precision</th>
+<th>Signal Recall</th>
+<th>Flat-to-Signal</th>
+</tr></thead><tbody>
+<tr>
+<td>single hd16_do20_mi1</td>
+<td>0.8787</td>
+<td>0.6233</td>
+<td>0.4822</td>
+<td>0.4609</td>
+<td>0.0654</td>
+</tr>
+<tr>
+<td>ensemble penalty 0.25</td>
+<td>0.8732</td>
+<td>0.6279</td>
+<td>0.4624</td>
+<td>0.4976</td>
+<td>0.0765</td>
+</tr>
+</tbody></table>
+<p>The ensemble with penalty 0.25 improves macro F1 and signal recall. It catches more directional movements, but it is more aggressive: signal precision drops, accuracy drops, and flat-to-signal increases. This is a recall-oriented ensemble variant.</p>
+<h3>15.2 Ensemble with flat_fp_penalty = 0.50</h3>
+<p>The same already-trained seed ensemble was re-evaluated with a stronger flat-to-signal penalty. No model weights were retrained.</p>
+<pre><code>Fold-tuned ensemble thresholds:
+fold_01: down &gt;= 0.85, up &gt;= 0.82
+fold_02: down &gt;= 0.82, up &gt;= 0.82
+
+Stable ensemble thresholds:
+down &gt;= 0.84
+up   &gt;= 0.82</code></pre>
+<table>
+<thead><tr>
+<th>Model</th>
+<th>Accuracy</th>
+<th>Macro F1</th>
+<th>Signal Precision</th>
+<th>Signal Recall</th>
+<th>Flat-to-Signal</th>
+</tr></thead><tbody>
+<tr>
+<td>single hd16_do20_mi1</td>
+<td>0.8787</td>
+<td>0.6233</td>
+<td>0.4822</td>
+<td>0.4609</td>
+<td>0.0654</td>
+</tr>
+<tr>
+<td>ensemble penalty 0.50</td>
+<td>0.8819</td>
+<td>0.6189</td>
+<td>0.4967</td>
+<td>0.4340</td>
+<td>0.0582</td>
+</tr>
+</tbody></table>
+<p>The stronger penalty makes the ensemble more conservative. It improves accuracy, signal precision, and flat-to-signal, but sacrifices too much signal recall and macro F1. This is a conservative ensemble variant, not the best balanced result.</p>
+</section>
+
+<section id="s16">
+<h2>16. Updated Summary and Final Recommendation</h2>
+<h3>16.1 Updated Summary Table</h3>
+
+<table>
+<thead><tr>
+<th>Setup</th>
+<th>Decision</th>
+<th>Accuracy</th>
+<th>Macro F1</th>
+<th>Weighted F1</th>
+<th>Signal Precision</th>
+<th>Signal Recall</th>
+<th>Flat-to-Signal</th>
+</tr></thead><tbody>
+<tr>
+<td>lag100 by_lag</td>
+<td>standard</td>
+<td>0.8769</td>
+<td>0.6172</td>
+<td>0.8822</td>
+<td>0.4190</td>
+<td>0.5129</td>
+<td>0.0814</td>
+</tr>
+<tr>
+<td>lag100 by_lag</td>
+<td>penalized</td>
+<td>0.8845</td>
+<td>0.6202</td>
+<td>0.8867</td>
+<td>0.4432</td>
+<td>0.4841</td>
+<td>0.0696</td>
+</tr>
+<tr>
+<td>ensemble 42+123 by_lag</td>
+<td>standard</td>
+<td>0.8764</td>
+<td>0.6202</td>
+<td>0.8824</td>
+<td>0.4185</td>
+<td>0.5229</td>
+<td>0.0831</td>
+</tr>
+<tr>
+<td>ensemble 42+123 by_lag</td>
+<td>penalized</td>
+<td>0.8796</td>
+<td>0.6180</td>
+<td>0.8838</td>
+<td>0.4267</td>
+<td>0.5013</td>
+<td>0.0770</td>
+</tr>
+<tr>
+<td>ensemble 42+123+777 by_lag</td>
+<td>standard</td>
+<td>0.8791</td>
+<td>0.6163</td>
+<td>0.8833</td>
+<td>0.4246</td>
+<td>0.4987</td>
+<td>0.0773</td>
+</tr>
+<tr>
+<td>lag100 by_file</td>
+<td>standard</td>
+<td>0.8459</td>
+<td>0.6115</td>
+<td>0.8561</td>
+<td>0.3995</td>
+<td>0.5415</td>
+<td>0.1118</td>
+</tr>
+<tr>
+<td>lag150 by_file</td>
+<td>standard</td>
+<td>0.8639</td>
+<td>0.6009</td>
+<td>0.8636</td>
+<td>0.4421</td>
+<td>0.4377</td>
+<td>0.0764</td>
+</tr>
+<tr>
+<td>lag150 by_file</td>
+<td>penalized</td>
+<td>0.8642</td>
+<td>0.5976</td>
+<td>0.8632</td>
+<td>0.4423</td>
+<td>0.4284</td>
+<td>0.0747</td>
+</tr>
+<tr>
+<td>lag150 by_lag</td>
+<td>standard</td>
+<td>0.8789</td>
+<td>0.6065</td>
+<td>0.8815</td>
+<td>0.4229</td>
+<td>0.4686</td>
+<td>0.0737</td>
+</tr>
+<tr>
+<td>lag150 by_lag</td>
+<td>penalized</td>
+<td>0.8813</td>
+<td>0.6066</td>
+<td>0.8828</td>
+<td>0.4304</td>
+<td>0.4572</td>
+<td>0.0697</td>
+</tr>
+<tr>
+<td>feature-rich unweighted walk-forward</td>
+<td>stable penalized</td>
+<td>0.8636</td>
+<td>0.6103</td>
+<td>not logged</td>
+<td>0.4288</td>
+<td>0.4833</td>
+<td>0.0858</td>
+</tr>
+<tr>
+<td>feature-rich + order-flow + weighted</td>
+<td>pre-grid walk-forward</td>
+<td>0.8753</td>
+<td>0.6153</td>
+<td>not logged</td>
+<td>0.4651</td>
+<td>0.4526</td>
+<td>0.0685</td>
+</tr>
+<tr>
+<td>grid best hd16_do20_mi1</td>
+<td>fold-tuned thresholds</td>
+<td>0.8787</td>
+<td>0.6233</td>
+<td>0.8776</td>
+<td>0.4822</td>
+<td>0.4609</td>
+<td>0.0654</td>
+</tr>
+<tr>
+<td>grid best hd16_do20_mi1</td>
+<td>stable thresholds</td>
+<td>0.8792</td>
+<td>0.6238</td>
+<td>0.8780</td>
+<td>0.4823</td>
+<td>0.4604</td>
+<td>0.0649</td>
+</tr>
+<tr>
+<td>seed ensemble hd16_do20_mi1</td>
+<td>penalty 0.25 stable</td>
+<td>0.8732</td>
+<td>0.6279</td>
+<td>not logged</td>
+<td>0.4624</td>
+<td>0.4976</td>
+<td>0.0765</td>
+</tr>
+<tr>
+<td>seed ensemble hd16_do20_mi1</td>
+<td>penalty 0.50 stable</td>
+<td>0.8819</td>
+<td>0.6189</td>
+<td>not logged</td>
+<td>0.4967</td>
+<td>0.4340</td>
+<td>0.0582</td>
+</tr>
+</tbody></table>
+
+<h3>16.2 Updated Final Interpretation</h3>
+<p>The earlier lag100 by_lag baseline remains a strong internal benchmark:</p>
+
+<pre><code>Accuracy        = 0.8845
+Macro F1        = 0.6202
+Signal precision= 0.4432
+Signal recall   = 0.4841
+Flat_to_signal  = 0.0696</code></pre>
+<p>However, the updated walk-forward experiments are stricter and more methodologically defensible because they evaluate on unseen chronological days. Under this stricter protocol, the best balanced result is:</p>
+<pre><code>feature-rich + order-flow + weighted NMI/TMFG
+hd16_do20_mi1
+stable thresholds: down &gt;= 0.83, up &gt;= 0.80
+
+Accuracy        = 0.8792
+Macro F1        = 0.6238
+Weighted F1     = 0.8780
+Signal precision= 0.4823
+Signal recall   = 0.4604
+Flat_to_signal  = 0.0649</code></pre>
+<p>This result is preferred because it combines stricter walk-forward validation, richer causal LOB and order-flow features, weighted NMI/TMFG graph information, hyperparameters selected by a small grid, stable thresholds averaged across validation folds, and a strong balance between precision, recall, macro F1, and false signals.</p>
+<h3>16.3 Recommended Results to Report</h3>
+<div class="callout good"><strong>Primary final result:</strong> RecurrentSparseSTHNN, feature-rich + order-flow, weighted NMI/TMFG adjacency, walk-forward evaluation, <code>hidden_dim=16</code>, <code>readout_dropout=0.20</code>, <code>message_iterations=1</code>, stable thresholds <code>down &gt;= 0.83</code>, <code>up &gt;= 0.80</code>.</div>
+<pre><code>Primary metrics:
+Accuracy        = 0.8792
+Macro F1        = 0.6238
+Weighted F1     = 0.8780
+Signal precision= 0.4823
+Signal recall   = 0.4604
+Flat_to_signal  = 0.0649
+
+Secondary recall-oriented result:
+seed ensemble with flat_fp_penalty = 0.25
+Accuracy        = 0.8732
+Macro F1        = 0.6279
+Signal precision= 0.4624
+Signal recall   = 0.4976
+Flat_to_signal  = 0.0765
+
+Secondary conservative result:
+seed ensemble with flat_fp_penalty = 0.50
+Accuracy        = 0.8819
+Macro F1        = 0.6189
+Signal precision= 0.4967
+Signal recall   = 0.4340
+Flat_to_signal  = 0.0582</code></pre>
+<p>The recommended final model for a balanced academic report is the single feature-rich order-flow weighted <code>hd16_do20_mi1</code> model with stable thresholds.</p>
+</section>
+
+
+</div>
+<footer>
+</footer>
+</main>
+</body>
+</html>

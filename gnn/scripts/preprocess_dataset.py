@@ -18,6 +18,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from src.dataset.preprocessing import preprocess_to_disk
 from src.graph.adjacency import load_tmfg_edge_index
+from src.models import is_recurrent_sparse_model
 
 
 def main(config_path: str, force: bool, chunk_size: int | None) -> None:
@@ -26,6 +27,13 @@ def main(config_path: str, force: bool, chunk_size: int | None) -> None:
 
     paths = preprocess_to_disk(cfg, force=force, chunk_size=chunk_size, verbose=True)
     data_cfg = cfg["data"]
+    model_type = cfg.get("model", {}).get("type", "").lower()
+    if is_recurrent_sparse_model(model_type):
+        print("\nPreprocessing complete.")
+        print(f"Processed dir: {paths['dir']}")
+        print("Cached edge_index: skipped (recurrent sparse model uses labeled adjacency).")
+        return
+
     edge_index = load_tmfg_edge_index(
         data_cfg["adj_matrix_path"],
         cache_path=Path(data_cfg["processed_dir"]) / "edge_index.pt",

@@ -8,6 +8,7 @@ Usage:
 
 import argparse
 import csv
+import json
 import random
 import sys
 import time
@@ -28,7 +29,7 @@ from src.dataset.preprocessing import (
     preprocess_to_disk,
 )
 from src.graph.adjacency import load_tmfg_edge_index
-from src.models import build_model
+from src.models import build_model, is_recurrent_sparse_model
 from src.training.metrics import compute_metrics, format_report
 from src.training.trainer import Trainer
 
@@ -147,6 +148,8 @@ def main(config_path: str, overrides: dict | None = None) -> None:
         cfg["data"]["split_strategy"] = overrides["split"]
     if overrides.get("seed") is not None:
         cfg["training"]["seed"] = int(overrides["seed"])
+    if overrides.get("checkpoint_dir") is not None:
+        cfg["paths"]["checkpoints"] = str(overrides["checkpoint_dir"])
     applied = {k: v for k, v in overrides.items() if v is not None and k != "config"}
     if applied:
         print(f"CLI overrides: {applied}\n")
@@ -171,20 +174,31 @@ def main(config_path: str, overrides: dict | None = None) -> None:
 
     paths = build_processed_paths(data_cfg["processed_dir"])
 
-    # ── Edge index (static) ────────────────────────────────────
+    # ── Graph structure ────────────────────────────────────────
     processed_dir = Path(data_cfg["processed_dir"])
-    edge_index = load_tmfg_edge_index(
-        data_cfg["adj_matrix_path"],
-        cache_path=processed_dir / "edge_index.pt",
-    )
-    print(f"\n[2/5] Graph: {2 * data_cfg['n_levels'] * (data_cfg['n_lags'] + 1)} nodes | {edge_index.shape[1]} directed edges")
+    model_type = cfg["model"]["type"].lower()
+    recurrent_sparse = is_recurrent_sparse_model(model_type)
+    num_nodes = 2 * data_cfg["n_levels"] * (data_cfg["n_lags"] + 1)
+
+    if recurrent_sparse:
+        edge_index = torch.empty((2, 0), dtype=torch.long)
+        print(
+            f"\n[2/5] Recurrent sparse graph: {num_nodes} nodes | "
+            f"adjacency={data_cfg['adj_matrix_path']}"
+        )
+    else:
+        edge_index = load_tmfg_edge_index(
+            data_cfg["adj_matrix_path"],
+            cache_path=processed_dir / "edge_index.pt",
+        )
+        print(f"\n[2/5] Graph: {num_nodes} nodes | {edge_index.shape[1]} directed edges")
 
     static_graph_batching = bool(cfg["training"].get("static_graph_batching", False))
-    model_type = cfg["model"]["type"].lower()
-    # GAT-based spatio-temporal variants stay on the PyG path (GATConv's attention
-    # is not reliable with the [B,N,C] shared-graph static trick).
-    use_static_mode = static_graph_batching and model_type in (
-        "gcn", "cgnn", "cgnn_sage", "stgcn", "stgcn_sage",
+    # GAT operators require flattened PyG batches; recurrent models use tensors.
+    use_static_mode = recurrent_sparse or (
+        static_graph_batching and model_type in (
+            "gcn", "cgnn", "cgnn_sage", "stgcn", "stgcn_sage",
+        )
     )
     if static_graph_batching and not use_static_mode:
         print(
@@ -216,7 +230,6 @@ def main(config_path: str, overrides: dict | None = None) -> None:
     else:
         n_lags = int(data_cfg["n_lags"])
         n_levels = int(data_cfg["n_levels"])
-        num_nodes = 2 * n_levels * (n_lags + 1)
         collate_fn = make_collate_fn(edge_index, cfg["training"]["batch_size"], num_nodes)
         loader_kw = dict(loader_kw_base)
         loader_kw["collate_fn"] = collate_fn
@@ -228,6 +241,22 @@ def main(config_path: str, overrides: dict | None = None) -> None:
     print(f"\n[3/5] Initializing model ({cfg['model']['type'].upper()})...")
     model = build_model(cfg).to(device)
     print(f"  Trainable parameters: {model.count_parameters():,}")
+    if recurrent_sparse:
+        print(
+            "  Recurrent blocks: "
+            f"{model.recurrent_edge_key_count:,} | temporal edges: "
+            f"{model.recurrent_temporal_edge_count:,} | same-lag edges: "
+            f"{model.recurrent_same_lag_edge_count:,}"
+        )
+        print(
+            "  Edge weights: "
+            f"{getattr(model, 'use_edge_weights', False)}"
+            + (
+                f" ({getattr(model, 'edge_weight_normalization', 'none')})"
+                if getattr(model, "use_edge_weights", False)
+                else ""
+            )
+        )
 
     class_weights = None
     if cfg["training"].get("use_class_weights", True):
@@ -248,8 +277,7 @@ def main(config_path: str, overrides: dict | None = None) -> None:
         factor=cfg["training"].get("lr_scheduler_factor", 0.5),
     )
 
-    ckpt_dir = (Path(cfg["paths"]["checkpoints"])
-                / f'{cfg["model"]["type"].lower()}_{data_cfg["split_strategy"]}_seed{cfg["training"]["seed"]}_h{cfg["model"]["hidden_channels"]}')
+    ckpt_dir = Path(cfg["paths"]["checkpoints"])
     trainer = Trainer(
         model=model,
         optimizer=optimizer,
@@ -285,25 +313,44 @@ def main(config_path: str, overrides: dict | None = None) -> None:
     summary_rows: list[list] = []
 
     if cfg["training"].get("tune_threshold", False):
-        from src.training.threshold import apply_thresholds, tune_thresholds
+        from src.training.threshold import apply_thresholds, decision_metrics, search_thresholds
 
         val_probs, val_labels = trainer.predict_proba(val_loader)
         test_probs, test_labels = trainer.predict_proba(test_loader)
-        td, tu, val_f1 = tune_thresholds(val_probs, val_labels)
+        search = search_thresholds(val_probs, val_labels)
+        td, tu = search["t_down"], search["t_up"]
 
         argmax_preds = test_probs.argmax(1)
         tuned_preds = apply_thresholds(test_probs, td, tu)
         m_arg = compute_metrics(argmax_preds, test_labels)
         m_tuned = compute_metrics(tuned_preds, test_labels)
+        signal_arg = decision_metrics(argmax_preds, test_labels)
+        signal_tuned = decision_metrics(tuned_preds, test_labels)
 
         lines.append(f"  F1 Macro (argmax): {m_arg['f1_macro']:.4f}   MCC (argmax): {m_arg['mcc']:.4f}")
         lines.append(f"  F1 Macro (tuned):  {m_tuned['f1_macro']:.4f}   MCC (tuned):  {m_tuned['mcc']:.4f}   "
-                     f"(down>={td:.2f} up>={tu:.2f} | val_f1={val_f1:.3f})")
+                     f"(down>={td:.2f} up>={tu:.2f} | val_f1={search['metrics']['f1_macro']:.3f})")
         lines.append(f"  Accuracy (tuned):  {m_tuned['accuracy']:.4f}")
         lines.append("")
         lines.append(format_report(tuned_preds, test_labels))
         summary_rows.append(_summary_row(stamp, model_name, split, "argmax", m_arg, "", "", n_params))
         summary_rows.append(_summary_row(stamp, model_name, split, "tuned", m_tuned, td, tu, n_params))
+        lines.append(f"  Signal precision: {signal_arg['signal_precision']:.4f} -> {signal_tuned['signal_precision']:.4f}")
+        lines.append(f"  Flat-to-signal rate: {signal_arg['flat_to_signal_rate']:.4f} -> {signal_tuned['flat_to_signal_rate']:.4f}")
+
+        threshold_payload = {
+            "checkpoint": str(ckpt_dir / "best.pt"),
+            "config": str(config_path),
+            "model_type": model_type,
+            "thresholds": {"down": td, "up": tu},
+            "validation_tuned_metrics": search["metrics"],
+            "test_argmax_metrics": signal_arg,
+            "test_tuned_metrics": signal_tuned,
+            "search": search["search"] | {"objective": search["objective"], "score": search["score"]},
+        }
+        threshold_path = ckpt_dir / "thresholds.json"
+        threshold_path.write_text(json.dumps(threshold_payload, indent=2), encoding="utf-8")
+        print(f"\nThresholds saved to {threshold_path}")
     else:
         preds, labels = trainer.predict(test_loader)
         metrics = compute_metrics(preds, labels)
@@ -331,7 +378,7 @@ if __name__ == "__main__":
     parser.add_argument("--config", default="config/default.yaml")
     parser.add_argument("--model",
                         choices=["gcn", "gat", "sage", "cgnn", "cgnn_sage", "cgnn_gat",
-                                 "stgcn", "stgcn_sage", "stgcn_gat"],
+                                 "stgcn", "stgcn_sage", "stgcn_gat", "recurrent_sparse_sthnn"],
                         default=None,
                         help="override model.type (es. stgcn)")
     parser.add_argument("--hidden", type=int, default=None,
@@ -346,5 +393,7 @@ if __name__ == "__main__":
                         help="override data.split_strategy (es. by_file per split onesto)")
     parser.add_argument("--seed", type=int, default=None,
                         help="override training.seed (per run multi-seed: 42, 43, 44)")
+    parser.add_argument("--checkpoint-dir", default=None,
+                        help="override paths.checkpoints")
     args = parser.parse_args()
     main(args.config, vars(args))
