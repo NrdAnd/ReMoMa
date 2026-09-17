@@ -1,0 +1,46 @@
+[
+  {
+    "file": "recurrent_sparse_tmfg_lag100_bins2000_from_full_tmfg_adjacency.tsv",
+    "sha256": "9cae07ee25654496e752b45f84156770d5782d99c08a647fa7e50422dbbe945c",
+    "nodes": 2020,
+    "directed_nonzero_entries": 12024,
+    "source_dates": "not recorded; training-only provenance unverified",
+    "origin": "Retained from source branches before integration"
+  },
+  {
+    "file": "recurrent_sparse_tmfg_lag100_bins2000_from_nmi_mean.tsv",
+    "sha256": "00028249ea4865a8c3600927092c818b8a2b2373446c2126e25c6e0e3d88fb90",
+    "nodes": 2020,
+    "directed_nonzero_entries": 12108,
+    "source_dates": "not recorded; training-only provenance unverified",
+    "origin": "Retained from source branches before integration"
+  },
+  {
+    "file": "recurrent_sparse_tmfg_lag100_bins2000_from_nmi_mean_weighted.tsv",
+    "sha256": "aab286f3f658af77574dd66212bb077863956cabf464b386a214554386664f1c",
+    "nodes": 2020,
+    "directed_nonzero_entries": 12108,
+    "source_dates": "not recorded; training-only provenance unverified",
+    "origin": "Reconstructed during integration; the weighted file was missing from the source branch.",
+    "source_matrix": "lob_similarity_nmi_rellag_lag150_bins2000_mean.csv",
+    "source_sha256": "be7205a608d122854198096a7572b2d661665f042fa4ee83c9f72fe9ddb84393",
+    "builder": "scripts/build_recurrent_tmfg_adjacency.py --max-lag 100 --weighted",
+    "matches_unweighted_reference_topology": true
+  },
+  {
+    "file": "recurrent_sparse_tmfg_lag150_bins2000_from_nmi_mean.tsv",
+    "sha256": "e9836fd3abd2fffd646e03dccaa21f81b0c867100e276ad97bc3b5fd91585fc4",
+    "nodes": 3020,
+    "directed_nonzero_entries": 18108,
+    "source_dates": "not recorded; training-only provenance unverified",
+    "origin": "Retained from source branches before integration"
+  },
+  {
+    "file": "tmfg_lag150_bins2000.csv",
+    "sha256": "e294a16ddc9a15b648458a9d93aa4409887491b32ab43eca1d67e4a5f82ad21f",
+    "nodes": 3020,
+    "directed_nonzero_entries": 18108,
+    "source_dates": "not recorded; training-only provenance unverified",
+    "origin": "Retained from source branches before integration"
+  }
+]

@@ -1,0 +1,33 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "remoma"
+version = "0.1.0"
+description = "Limit order book classification with graph and recurrent models"
+readme = "README.md"
+requires-python = ">=3.10,<3.12"
+dependencies = [
+  "torch==2.2.0",
+  "torch-geometric==2.7.0",
+  "numpy==1.26.4",
+  "pandas==2.3.3",
+  "scikit-learn==1.7.2",
+  "PyYAML==6.0.3",
+  "tqdm==4.67.3",
+]
+
+[project.optional-dependencies]
+research = ["jupyterlab", "matplotlib", "seaborn", "networkx", "plotly", "pyvis", "scipy"]
+dev = ["build", "ruff"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.ruff]
+line-length = 110
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["F821", "F822", "F823", "E9"]

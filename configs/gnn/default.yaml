@@ -1,0 +1,92 @@
+# Complete experiment configuration. Paths are relative to the repository root.
+data:
+  raw_dir: data/raw
+  adj_matrix_path: data/graphs/tmfg_lag150_bins2000.csv
+  processed_dir: data/processed/default
+  use_precomputed: true
+  force_preprocess: false
+  preprocess_chunk_size: 2048
+  feature_dtype: float16
+  n_lags: 150
+  n_levels: 10
+  n_volume_bins: 2000
+  price_type: mid
+  label_mode: abs
+  threshold: 100
+  prediction_horizon: 50
+  split_strategy: by_file
+  train_files:
+  - 0
+  - 1
+  - 2
+  val_files:
+  - 3
+  test_files:
+  - 4
+  train_ratio: 0.7
+  val_ratio: 0.15
+  normalize_prices: true
+  max_samples_per_class: 50000
+  max_val_samples: 25000
+  max_test_samples: 50000
+  subsample_seed: 42
+model:
+  type: gcn
+  hidden_channels: 225
+  num_layers: 3
+  dropout: 0.3
+  num_heads: 2
+  add_lag_feature: true
+  overrides:
+    sage:
+      hidden_channels: 160
+    gat:
+      hidden_channels: 192
+      num_heads: 2
+      num_layers: 2
+    cgnn:
+      hidden_channels: 175
+      cnn_channels: 64
+      cnn_kernel: 5
+      use_bin: false
+    cgnn_sage:
+      hidden_channels: 140
+      cnn_channels: 64
+      cnn_kernel: 5
+      use_bin: false
+    cgnn_gat:
+      hidden_channels: 140
+      cnn_channels: 64
+      cnn_kernel: 5
+      num_heads: 2
+      use_bin: false
+    stgcn_sage:
+      hidden_channels: 103
+      num_layers: 2
+      cnn_kernel: 3
+    stgcn_gat:
+      hidden_channels: 104
+      num_layers: 2
+      cnn_kernel: 3
+      num_heads: 2
+    stgcn:
+      hidden_channels: 110
+      num_layers: 2
+      cnn_kernel: 3
+  family: gnn
+training:
+  epochs: 50
+  batch_size: 128
+  static_graph_batching: true
+  lr: 0.0003
+  weight_decay: 0.0001
+  early_stopping_patience: 8
+  lr_scheduler_patience: 3
+  lr_scheduler_factor: 0.5
+  grad_clip: 1.0
+  use_class_weights: false
+  tune_threshold: true
+  num_workers: 0
+  seed: 42
+paths:
+  checkpoints: runs/gnn

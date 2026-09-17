@@ -1,0 +1,14 @@
+.git
+.venv
+**/__pycache__
+lobster_cisco
+csv_NMI_matrix
+data/raw
+data/processed
+runs
+.codex_tmp
+tmp
+notebooks
+docs
+archive
+gnn

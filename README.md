@@ -1,67 +1,90 @@
-# Limit Order Book (LOB) Network Analysis & GNN Price Prediction
+# ReMoMa
 
-This repository hosts an end-to-end framework for advanced financial market microstructure analysis and price movement prediction. 
+ReMoMa is a research framework for classifying future limit order book price movements as **down (0), flat (1), or up (2)**. It provides graph neural networks and a recurrent sparse spatio-temporal model through a shared preprocessing, training, and evaluation pipeline.
 
-Utilizing high-frequency Limit Order Book (LOB) data, the project explores the spatial and temporal relationships between various price and volume levels. Starting from an in-depth exploratory analysis, the framework extracts the market's topology via Network Filtering algorithms (GLASSO and TMFG). These graph structures are then designed to feed a **Graph Neural Network (GNN)** aimed at predicting the future direction of the asset's price (Up, Down, or Flat).
+The two model families coexist in one branch and one Python package. Selecting a model does not require switching Git branches.
 
----
+## Model selection
 
-## 🏗️ Project Architecture
+| Family | `model.type` values | Configuration |
+| --- | --- | --- |
+| GNN | `gcn`, `gat`, `sage`, `cgnn`, `cgnn_sage`, `cgnn_gat`, `stgcn`, `stgcn_sage`, `stgcn_gat` | [GNN default](configs/gnn/default.yaml) |
+| Recurrent | `recurrent_sparse_sthnn` | [Recurrent by-file](configs/recurrent/recurrent_sparse_sthnn_by_file.yaml) |
 
-The repository is divided into sequential modules that reflect the data processing and predictive modeling pipeline:
+The recurrent model uses a GRU cell and shared message transformations on feature/lag graph nodes. It is also graph-based; “GNN” and “recurrent” distinguish the two implementation families in this repository.
 
-### 📂 1. LOB Similarity & Exploratory Analysis
-*Contains the analytical foundation and data preparation.*
-- **Main File:** `csvAnalytics.ipynb`
-- **Description:** Leverages GPU acceleration (via NVIDIA RAPIDS) to process massive amounts of LOB data. It calculates multi-lag similarity matrices and statistically analyzes the dependencies between book sides (Ask/Bid), depth levels, and the temporal persistence of information.
+## Quick start
 
-### 📂 2. GLASSO Network Modeling
-*Network construction via precision matrix estimation.*
-- **Main Files:** `glasso_v4_lag20.ipynb`, `glasso_v5_lag20.ipynb` and `glassoLagComparison.ipynb`
-- **Description:** Applies the Graphical Lasso to extract sparse networks of conditional dependencies among LOB features. Includes an advanced comparative analysis on the impact of temporal memory (Lag Comparison) and generates interactive 3D visualizations of market dynamics.
-
-### 📂 3. TMFG Topological Filtering
-*Extraction of the core information infrastructure (Backbone).*
-- **Main Files:** `TMFG_core.py`, `build_graph_tmfg.ipynb`
-- **Description:** Implements the Triangulated Maximally Filtered Graph (TMFG) algorithm to filter noise from the similarity matrix while guaranteeing a planar structure. This allows for the identification of market "Hubs", calculation of network centralities, and analysis of clique composition.
-
-### ⏳ 4. GNN Price Prediction (Work in Progress)
-*The predictive engine of the framework.*
-- **Goal:** Train a Graph Neural Network (e.g., GCN or GAT) using the graphs extracted in the previous modules.
-- **Task:** 3-way multiclass classification to predict the asset's price direction in the next tick/time horizon:
-  1. **Up** (Increase)
-  2. **Down** (Decrease)
-  3. **Flat** (Stationary)
-- The adjacency matrices (from GLASSO/TMFG) will guide the neural network's *message passing*, allowing the model to capture not just the current state of the LOB, but the complex structural relationships between its levels.
-- **Implementation details:** see `gnn/README.md` for the current memory-mapped preprocessing + training workflow.
-
----
-
-## 🚀 Workflow (Pipeline)
-
-1. **Ingestion & EDA:** Raw CSV data is loaded and analyzed in the `1_LOB_Similarity_Analysis` folder to extract baseline metrics.
-2. **Graph Generation:** Processed data passes through the `2_GLASSO` and/or `3_TMFG` modules to generate the adjacency matrices (weighted and unweighted) that define the network topology at specific time steps.
-3. **Graph Machine Learning:** Node features (LOB prices/volumes) and edges (structural relationships) are passed to the GNN for training and directional price inference.
-
----
-
-## 🛠️ Prerequisites and Installation
-
-Given the volume of data (High-Frequency Trading) and the use of neural networks, a GPU-accelerated environment is **highly recommended**.
-
-### Base Requirements
-- Python 3.10+
-- NVIDIA GPU (compatible with CUDA 12.x)
-
-### Environment Setup
-It is recommended to use `conda` to properly manage RAPIDS libraries and deep learning frameworks:
+Use Python 3.10 or 3.11. Run commands from the repository root.
 
 ```bash
-# For data analysis and GPU acceleration
-conda install -y -c rapidsai -c conda-forge -c nvidia \
-    cudf=26.04 cupy pandas scikit-learn matplotlib seaborn \
-    plotly networkx pyvis tqdm
+python -m venv .venv
+source .venv/bin/activate
+python -m pip install -e '.[dev]'
+python -m unittest discover -s tests -v
+```
 
-# For the upcoming GNN module (PyTorch & PyTorch Geometric)
-conda install pytorch torchvision torchaudio pytorch-cuda=12.1 -c pytorch -c nvidia
-conda install pyg -c pyg
+The test suite includes small synthetic one-epoch training checks; it does not load real market data. Use a remote compute host for the full training commands below.
+
+Place five correctly ordered LOBSTER ten-level orderbook files in `data/raw/`. Raw market data is not distributed with the repository. See [setup](docs/setup.md) and the [data contract](docs/data.md) before preprocessing.
+
+```bash
+# GNN example: temporal CNN followed by graph convolutions.
+python scripts/preprocess_dataset.py --config configs/gnn/default.yaml
+python scripts/train.py --config configs/gnn/default.yaml --model cgnn \
+  --checkpoint-dir runs/cgnn_example
+
+# Recurrent example: separate graph, feature cache, and run directory.
+python scripts/preprocess_dataset.py \
+  --config configs/recurrent/recurrent_sparse_sthnn_by_file.yaml
+python scripts/train.py \
+  --config configs/recurrent/recurrent_sparse_sthnn_by_file.yaml \
+  --checkpoint-dir runs/recurrent_example
+
+# Reload the saved effective configuration automatically.
+python scripts/evaluate.py --checkpoint runs/cgnn_example/best.pt
+python scripts/evaluate.py --checkpoint runs/recurrent_example/best.pt \
+  --thresholds runs/recurrent_example/thresholds.json
+```
+
+Without `--checkpoint-dir`, training creates a unique directory under the configured checkpoint root. An explicit directory is used exactly as supplied and must not already contain a run.
+
+## Repository structure
+
+```text
+src/remoma/           Shared Python package
+  dataset/           Labels, binning, engineered features, preprocessing
+  graph/             Graph loading, validation, and TMFG construction
+  models/gnn/        Nine graph-convolution architectures
+  models/recurrent/  Recurrent sparse STHNN implementation
+  training/          Trainer, metrics, decision thresholds
+  utils/             Input alignment and checkpoint provenance
+scripts/             Training, evaluation, experiments, and analysis commands
+configs/             Separate GNN and recurrent experiment configurations
+data/graphs/         Versioned reference adjacency matrices
+docs/                Setup, architecture, usage, development, and deployment
+notebooks/           Exploratory LOB, GLASSO, and TMFG notebooks
+tests/               Synthetic integration and regression tests
+deploy/              CPU batch-execution container
+archive/legacy/      Historical prototypes outside the supported pipeline
+gnn/                 Compatibility entry points for previous commands
+```
+
+## Documentation
+
+- [Documentation index](docs/README.md)
+- [Installation and environment](docs/setup.md)
+- [Architecture and model contracts](docs/architecture.md)
+- [Data, labels, splits, and graph provenance](docs/data.md)
+- [Training, evaluation, and experiments](docs/usage.md)
+- [Configuration reference](configs/README.md)
+- [Development and validation](docs/development.md)
+- [Branch integration and migration procedure](docs/merging.md)
+- [Deployment and GitHub publication](docs/deployment.md)
+- [Historical experiments and limitations](docs/reports/README.md)
+
+## Research status
+
+This integration includes synthetic CPU validation. It does not reproduce the historical full-data experiments or establish a live trading service. Historical results used earlier preprocessing and, in some cases, different test subsamples. The reference graphs lack a complete training-only provenance record; rebuild them from the training period before making leakage-free generalization claims. See the [validation record](docs/validation.md).
+
+No repository-wide license has been selected. The owners must choose an appropriate license before presenting this work as open source; existing third-party license notices remain in place.

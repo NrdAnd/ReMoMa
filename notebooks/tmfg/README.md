@@ -1,0 +1,9 @@
+# TMFG graph construction
+
+`build_graph_tmfg.ipynb` filters a similarity matrix, constructs a TMFG, and explores degree centrality, separator participation, clique diversity, and path lengths.
+
+The reusable implementation is [remoma.graph.tmfg](../../src/remoma/graph/tmfg.py). It supports binary adjacency, weighted adjacency, and LoGo output modes. Root-level graph builder scripts export labeled matrices for recurrent experiments.
+
+Run the bootstrap cell first, then select the intended training-only similarity matrix. The historical notebook's lag-zero filtering rule is an experimental choice, not a requirement of every model. Edge count alone does not prove planarity, and clustering/path length alone do not establish a small-world result.
+
+`lib/` contains the existing third-party visualization assets. Their upstream notices are retained. See the [notebook guidance](../README.md).

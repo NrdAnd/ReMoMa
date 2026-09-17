@@ -1,25 +1,35 @@
-/csv_NMI_matrix
-tmfg/tmfg_colorato.html
-tmfg/tmfg_adj_matrix_cisco_2000_bins.csv
-/lobster_cisco
-
-# macOS
+# Local datasets and machine-specific working files
+/lobster_cisco/
+/csv_NMI_matrix/
+/data/raw
+/data/processed/
+/data/similarity/*
+!/data/similarity/README.md
+/runs/
+/configs/local/
+/.codex_tmp/
+/tmp/
 .DS_Store
+.env
+.venv/
 
-# Python cache
+# Python and notebook build artifacts
 __pycache__/
 *.py[cod]
-
-# GNN processed/precomputed data
-gnn/data/processed*/
-gnn/data/adjacency/recurrent_sparse_tmfg_lag100_bins2000_from_nmi.tsv
-
-# Training artifacts
-gnn/checkpoints/
-*.log
-
-# Notebooks
+*.egg-info/
+build/
+dist/
+.pytest_cache/
+.ruff_cache/
 .ipynb_checkpoints/
-gnn/scripts/lr_finder.py
-gnn/scripts/verify_train.py
-*.pptx
+
+# Outputs retained by existing local checkouts
+/gnn/data/
+/gnn/checkpoints/
+/gnn/results/
+/gnn/experimental_results_table_precise.png
+/gnn/scripts/lr_finder.py
+/gnn/scripts/verify_train.py
+/tmfg/*.csv
+/tmfg/*.html
+*.log
