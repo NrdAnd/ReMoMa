@@ -1,17 +1,22 @@
-# Branch integration and migration
+# Integration history and branch workflow
 
 ## Scope and recorded history
 
-The integration branch is `unified-model-pipeline`. It incorporates these fetched source tips:
+The current `main` branch contains the completed model-family integration. The temporary
+`unified-model-pipeline` branch was used to prepare and validate that work; a separate remote
+branch is no longer required. Removing the old branch pointers does not remove their commits,
+because both source histories are reachable from `main` through the recorded merge commit.
+
+The integration incorporated these source tips:
 
 | Reference | Commit | Role |
 | --- | --- | --- |
-| `origin/main` | `10283d4` | Nine GNN architectures, result reports, initialization-seed support |
-| `origin/AdaptiveRecurrentSparseSTHNN` | `4ba8335` | Recurrent model, engineered features, threshold/ensemble/fold workflows |
+| Former GNN `main` | `10283d4` | Nine GNN architectures, result reports, initialization-seed support |
+| Former `AdaptiveRecurrentSparseSTHNN` | `4ba8335` | Recurrent model, engineered features, threshold/ensemble/fold workflows |
 | Shared ancestor | `5b038af` | Original common pipeline |
 | Integration merge | `fc1a36a` | Two-parent merge containing both histories |
 
-The local `main` originally pointed to `5b038af`, nine commits behind `origin/main`. Integration started from `origin/main`; neither original branch was rewritten. The earlier `optimize-preprocessing` branch was already part of the shared history.
+Before integration, the local `main` pointed to `5b038af`, nine commits behind the fetched GNN tip. Integration started from `10283d4`; neither source line was rewritten. The earlier `optimize-preprocessing` work was already part of the shared history. Subsequent organization, documentation, and end-to-end pipeline commits are descendants of `fc1a36a` on the current `main`.
 
 The merge produced textual conflicts in `gnn/scripts/train.py` and `gnn/src/models/__init__.py`. They were resolved explicitly before structural migration. No blanket “ours” or “theirs” strategy was used.
 
@@ -52,52 +57,40 @@ Tracked bytecode, generated preprocessing/checkpoint fragments, temporary PDF re
 
 Compatibility wrappers forward to the root implementation and translate old `config/<name>.yaml` arguments. New code must import `remoma`, not the former generic `src` namespace. Old external Python imports and arbitrary old relative data/output paths are not compatibility guarantees.
 
-## Verify the current integration
+## Verify the preserved integration history
 
-Start with a clean tracked working tree and the integration branch checked out:
+Start with a clean tracked working tree and `main` checked out:
 
 ```bash
 git status --short
-git fetch --prune origin
-git merge-base --is-ancestor origin/main HEAD
-git merge-base --is-ancestor origin/AdaptiveRecurrentSparseSTHNN HEAD
+git switch main
+git merge-base --is-ancestor 10283d4 HEAD
+git merge-base --is-ancestor 4ba8335 HEAD
+git show --no-patch --pretty=raw fc1a36a
 git diff --check
 python -m unittest discover -s tests -v
 python scripts/check_repository.py
 ```
 
-Each ancestry command must return exit status zero. This proves that the exact fetched branch tip is already contained in the integration branch. If a branch has advanced, the check deliberately fails: integrate and test the new commits before proceeding.
+Each ancestry command must return exit status zero. `git show` must list `10283d4` and `4ba8335` as the two parents of `fc1a36a`. These checks use immutable commit identities and therefore remain valid even after the temporary remote branch names have been removed.
 
-For the recorded source tips, a merge into the integrated descendant is already up to date. Merging the integration branch into either recorded source tip can fast-forward. This is a property of those commit histories, not a guarantee about future edits.
+For the recorded source tips, the current `main` is already an integrated descendant. This statement applies to those exact commits and does not make claims about later work in another repository.
 
-## Publish the integration for review
+## Current branch workflow
 
-These commands are instructions for the repository owners; no push is required to prepare the local result.
-
-```bash
-git switch unified-model-pipeline
-git fetch --prune origin
-git merge-base --is-ancestor origin/main HEAD
-git merge-base --is-ancestor origin/AdaptiveRecurrentSparseSTHNN HEAD
-git push -u origin unified-model-pipeline
-```
-
-Open a pull request targeting `main`. To retain the ancestry property, use a **merge commit or fast-forward**, according to branch protection. A squash merge discards the integration commit's parent relationships and therefore loses the proof that both original branch tips are contained. Rebase-merging can likewise rewrite the recorded integration history.
-
-After the integration is present on `origin/main`, an owner can synchronize the old recurrent branch if it has no independent newer commits:
+New changes should start from the integrated `main` in the repository being edited:
 
 ```bash
-git fetch origin
-git switch AdaptiveRecurrentSparseSTHNN
-git merge --ff-only origin/main
-git push origin AdaptiveRecurrentSparseSTHNN
+git switch main
+git pull --ff-only origin main
+git switch -c descriptive-feature-name
 ```
 
-If `--ff-only` fails, stop that sequence and inspect the divergence. Do not force-push to manufacture a clean result.
+Open future pull requests against `main` and run the documented checks before merging. The historical integration merge `fc1a36a` must remain reachable; ordinary merge-policy choices for later feature branches do not change its two parents.
 
-## If the old branches receive new work
+## If an older private line receives new work
 
-Keep an untouched source branch and merge its new commits into the integration branch, resolving semantic changes as well as text conflicts. For a long-lived feature branch, merge the integrated `main` into it before further development. Avoid copying its pre-migration directory tree over the new package.
+Do not push to or rewrite the former private repository unless its owner explicitly authorizes that operation. Bring authorized new commits into a fresh feature branch of the current repository, then merge them into `main` while resolving semantic changes as well as text conflicts. Avoid copying a pre-migration directory tree over the current package.
 
 Where paths moved, map the change to the corresponding new file. Git may detect renames, but large translations and reorganizations can require manual resolution. Re-run model, preprocessing, checkpoint, and CLI checks after conflict resolution. Never resolve a conflict by dropping the other family's registration or duplicating the common trainer.
 

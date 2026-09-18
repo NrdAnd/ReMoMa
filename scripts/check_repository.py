@@ -53,10 +53,11 @@ def main() -> int:
                 errors.append(f"{path.relative_to(ROOT)}: missing reference graph")
         except (ValueError, KeyError) as exc:
             errors.append(f"{path.relative_to(ROOT)}: {exc}")
-    markdown = [*ROOT.glob("*.md"), *(ROOT / "docs").rglob("*.md"),
-                *(ROOT / "configs").rglob("*.md"), *(ROOT / "notebooks").rglob("*.md"),
-                *(ROOT / "data").glob("*.md"), *(ROOT / "data/graphs").glob("*.md"),
-                ROOT / "gnn/README.md", ROOT / "archive/README.md"]
+    ignored_markdown_parts = {".git", ".venv", ".pytest_cache", ".ruff_cache",
+                              "__pycache__", "build", "dist"}
+    markdown = [path for path in ROOT.rglob("*.md")
+                if not any(part in ignored_markdown_parts or part.endswith(".egg-info")
+                           for part in path.parts)]
     for path in markdown:
         text = path.read_text(encoding="utf-8")
         if text.count("```") % 2:

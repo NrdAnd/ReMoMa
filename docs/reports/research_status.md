@@ -1,6 +1,6 @@
 # Research status and next experiments
 
-The integrated implementation supports both families, engineered node channels, validation-only threshold tuning, multiple seeds, and walk-forward experiment generation. See the [GNN records](gnn_experiments.md) and [recurrent report](recurrent_experiments.html) for historical measurements.
+The integrated implementation supports both families, engineered node channels, validation-only threshold tuning, multiple seeds, and complete fixed or walk-forward execution with training-only NMI/TMFG construction. See the [GNN records](gnn_experiments.md) and [recurrent report](recurrent_experiments.html) for historical measurements.
 
 The earlier working documents overstated comparisons with the external HLOB benchmark and interpreted small seed variability as statistical significance. The available records do not justify those claims: test periods and subsamples differ, most local results use one held-out day, and graph estimation dates are not fully recorded.
 

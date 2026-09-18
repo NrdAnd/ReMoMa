@@ -1,5 +1,9 @@
 # Integration validation record
 
+## Documentation consistency audit — 2026-09-18
+
+All 28 tracked Markdown documents, including the pull-request template, were checked for local links, closed code fences, current paths, configuration names, CLI commands, preprocessing schema, generated artifacts, model selection, pipeline behavior, and branch-history instructions. The repository checker was expanded to include hidden tracked documentation while excluding local build/test caches. All 31 current and compatibility command help entry points passed, and the historical GNN table matched all 32 rows in its source CSV. Documentation now describes the main-only remote layout while preserving the two-parent integration proof by immutable commit ID. A tracked-file inventory found no raw-data paths or common credential filenames; this is a targeted publication check, not a substitute for GitHub secret scanning. This audit ran no model training and did not process raw CSCO contents.
+
 ## End-to-end pipeline validation — 2026-09-18
 
 The expanded suite completed in 189.286 seconds: **22 tests discovered, 21 passed, one CUDA-only test explicitly skipped**. The local platform and numerical environment are the CPU environment recorded below. No training or NMI estimation was performed on the real CSCO files.
@@ -21,7 +25,9 @@ Final source compilation, configured Ruff checks, and whitespace checks passed. 
 
 The following sections retain the earlier integration validation record and its historical scope.
 
-Date: 2026-09-17. Platform: macOS arm64, Python 3.10.20, CPU. Runtime: PyTorch 2.2.0, PyG 2.7.0, NumPy 1.26.4, pandas 2.3.3, scikit-learn 1.7.2, PyYAML 6.0.3, tqdm 4.67.3.
+## Earlier integration validation — 2026-09-17
+
+Platform: macOS arm64, Python 3.10.20, CPU. Runtime: PyTorch 2.2.0, PyG 2.7.0, NumPy 1.26.4, pandas 2.3.3, scikit-learn 1.7.2, PyYAML 6.0.3, tqdm 4.67.3.
 
 ## Completed correctness checks
 
@@ -56,6 +62,6 @@ Source compilation, undefined-name lint checks, notebook cleanliness/syntax chec
 - The Docker recipe and Linux/Python 3.11 CI are provided but require execution on their respective environments. Local macOS results do not certify those platforms.
 - Raw data and historical graph-estimation dates were not independently reconstructed or certified.
 - Historical prototypes are outside the supported runtime and retain documented defects for research history.
-- No branch was pushed and no GitHub pull request or release was published during preparation.
+- At the time of this earlier validation, no branch had been pushed and no GitHub pull request or release had been published. This records that validation session, not the repository's later hosting state.
 
 Use remote compute for full model training. The local regression suite's synthetic training is deliberately small; it is still an execution of training code, not merely a static check.

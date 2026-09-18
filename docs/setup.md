@@ -55,7 +55,7 @@ python scripts/check_repository.py
 
 ## Data setup
 
-Create `data/raw/` and place the original matching orderbook files there. Filenames must end in `_orderbook_10.csv`; lexical order defines zero-based file indices. The main examples expect at least five files: train `[0, 1, 2]`, validation `[3]`, test `[4]`.
+Create `data/raw/` and place the original matching orderbook files there. Filenames must end in `_orderbook_10.csv`. Lower-level configurations without an explicit `data.raw_files` list use lexical filename order for zero-based file indices; their main examples expect at least five files: train `[0, 1, 2]`, validation `[3]`, test `[4]`. The complete pipeline instead selects explicit ISO dates and freezes the resolved file list in each run.
 
 Use a private complete configuration under `configs/local/` to change paths, file indices, sampling, or hardware settings. All paths inside YAML configurations are relative to the repository root; absolute paths are supported. Editable installs locate that root automatically. For a wheel installation, set `REMOMA_ROOT` to the checkout path before importing the package, or run from the checkout root. Existing local `lobster_cisco/` folders are not moved or published automatically.
 

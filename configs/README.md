@@ -31,7 +31,7 @@ Configurations are complete YAML mappings; there is no implicit inheritance. Pat
 | `data` | `max_samples_per_class`, `max_val_samples`, `max_test_samples` | Optional positive sampling caps; null means no cap |
 | `data` | `subsample_seed` | Sampling seed independent of initialization |
 | `data` | `normalize_prices`, `extra_node_features`, `feature_dtype` | Feature representation and disk precision |
-| `data` | `use_precomputed`, `force_preprocess`, `preprocess_chunk_size` | Offline feature-cache behavior; training requires precomputed tensors |
+| `data` | `use_precomputed`, `force_preprocess`, `preprocess_chunk_size` | Feature-cache reuse/rebuild behavior; training prepares a missing or incompatible cache |
 | `data` | `raw_files`, `raw_cache_dir`, `storage_mode` | Frozen input list, shared parsed-CSV cache, `indexed` or `materialized` windows |
 | `data` | `allow_missing_raw` | Explicit deployment exception; defaults to false |
 | `model` | `family`, `type`, `overrides` | Family validation, selected architecture, per-architecture settings |

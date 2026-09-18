@@ -48,11 +48,11 @@ Checkpoints record architecture/feature/label settings and graph hash, not a com
 
 ## Prepare a GitHub release
 
-1. Follow the ancestry checks and review flow in [merging](merging.md).
+1. Verify the preserved integration ancestry and current `main` workflow in [merging](merging.md).
 2. Run the checks in [development](development.md) and wait for CI on the actual PR head.
 3. Confirm that only intended source, documentation, graph inputs, and curated reports are tracked.
 4. Select a repository license with the owners; verify rights for third-party code and redistributable artifacts. This change does not invent a license or alter upstream notices.
 5. Review graph/data provenance and distinguish historical measurements from results reproduced on the release commit.
-6. Merge while preserving history as described in the integration procedure, then tag the reviewed release according to the owners' versioning policy.
+6. Merge the reviewed release changes into `main`, then tag that exact commit according to the owners' versioning policy.
 
-The preparation task does not itself push branches, merge a GitHub pull request, create a release, or expose private datasets.
+Repository visibility, branch protection, tags, and releases are GitHub administration actions. The pipeline never changes them and never uploads private datasets. A public GitHub repository is not automatically open source: until the owners add a license, default copyright restrictions apply.

@@ -64,14 +64,14 @@ Without `--checkpoint-dir`, training creates a unique directory under the config
 
 ```text
 src/remoma/           Shared Python package
-  dataset/           Labels, binning, engineered features, preprocessing
-  graph/             Graph loading, validation, and TMFG construction
+  dataset/           Labels, binning, indexed/materialized features, preprocessing
+  graph/             NMI estimation, graph validation, and TMFG construction
   models/gnn/        Nine graph-convolution architectures
   models/recurrent/  Recurrent sparse STHNN implementation
   training/          Trainer, metrics, decision thresholds
-  utils/             Input alignment and checkpoint provenance
+  utils/             Input caches, artifact identities/locks, checkpoint provenance
 scripts/             Training, evaluation, experiments, and analysis commands
-configs/             Separate GNN and recurrent experiment configurations
+configs/             GNN, recurrent, and complete-pipeline configurations
 data/graphs/         Versioned reference adjacency matrices
 docs/                Setup, architecture, usage, development, and deployment
 notebooks/           Exploratory LOB, GLASSO, and TMFG notebooks
@@ -91,7 +91,7 @@ gnn/                 Compatibility entry points for previous commands
 - [Complete CSCO pipeline and training-only graphs](docs/pipeline.md)
 - [Configuration reference](configs/README.md)
 - [Development and validation](docs/development.md)
-- [Branch integration and migration procedure](docs/merging.md)
+- [Integration history and current branch workflow](docs/merging.md)
 - [Deployment and GitHub publication](docs/deployment.md)
 - [Historical experiments and limitations](docs/reports/README.md)
 

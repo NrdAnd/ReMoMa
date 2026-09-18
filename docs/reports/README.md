@@ -19,7 +19,7 @@ The raw text/CSV result files are preserved without recomputing metrics. Slides 
 - July and September runs used different 50,000-sample subsets of that day.
 - Initialization-seed variability is not a confidence interval for variation across trading days.
 - The supplied graph inputs do not carry sufficient source-date provenance to certify training-only estimation.
-- Schema version 2 changes temporal purging and binner-fit ranges. Old results are not a reproduction of the new pipeline.
+- Schema version 3 includes the corrected temporal purging and training-only binner ranges introduced in version 2, and adds indexed/materialized storage identities. Old results are not a reproduction of the current pipeline.
 - Comparing values from different datasets, dates, label definitions, threshold policies, or parameter budgets does not establish state-of-the-art superiority.
 - Directional classification metrics are not profit, execution quality, or a backtest with trading costs.
 

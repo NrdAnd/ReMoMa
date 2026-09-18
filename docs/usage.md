@@ -25,7 +25,7 @@ python scripts/preprocess_dataset.py --config configs/gnn/default.yaml
 python scripts/preprocess_dataset.py --config configs/gnn/default.yaml --force --chunk-size 512
 ```
 
-Training also preprocesses automatically when the cache is missing or incompatible. A rebuild can be expensive: all raw files are loaded into RAM, while output tensors are memory-mapped on disk. Reduce chunk size to reduce temporary feature memory; this does not make raw-file loading streaming.
+Training also preprocesses automatically when the cache is missing or incompatible. Parsed orderbooks are stored once as shared read-only arrays; the first parse temporarily holds one CSV file in memory. Materialized features are written in chunks to memory-mapped arrays, while indexed storage saves row references and reconstructs only the current batch. Reduce chunk size to lower temporary feature memory in materialized mode.
 
 ## Train and retain a run
 
@@ -46,9 +46,12 @@ runs/cgnn_seed42/
   binner.pkl              Snapshot of the fitted training-volume bins
   preprocessing_meta.json Snapshot of data manifests and preprocessing semantics
   adjacency.csv           Snapshot of the graph (or adjacency.tsv / adjacency.npz)
+  graph_manifest.json     Present for graphs created by the complete pipeline
   metrics.csv             Per-epoch training/validation metrics
+  calibration.json        When enabled: validation thresholds frozen before test inference
   thresholds.json         Present when training.tune_threshold is enabled
   results/
+    metrics.json           Machine-readable per-rule metrics and confusion matrices
     summary.csv           Argmax and, when enabled, tuned metrics for this run
     <model>_<split>_<timestamp>.txt
 ```

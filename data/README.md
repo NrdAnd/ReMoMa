@@ -3,7 +3,7 @@
 | Directory | Version control | Purpose |
 | --- | --- | --- |
 | `raw/` | Ignored | Private original LOBSTER files |
-| `processed/` | Ignored | Rebuildable memory-mapped features and metadata |
+| `processed/` | Ignored | Rebuildable memory-mapped features or indexed windows, plus metadata |
 | `graphs/` | Tracked reference inputs | Historical labeled adjacency matrices |
 | `similarity/` | README only | Locally generated similarity matrices |
 
