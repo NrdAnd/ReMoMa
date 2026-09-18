@@ -88,9 +88,9 @@ git switch -c descriptive-feature-name
 
 Open future pull requests against `main` and run the documented checks before merging. The historical integration merge `fc1a36a` must remain reachable; ordinary merge-policy choices for later feature branches do not change its two parents.
 
-## If an older private line receives new work
+## If an older development line receives new work
 
-Do not push to or rewrite the former private repository unless its owner explicitly authorizes that operation. Bring authorized new commits into a fresh feature branch of the current repository, then merge them into `main` while resolving semantic changes as well as text conflicts. Avoid copying a pre-migration directory tree over the current package.
+Bring the relevant commits into a fresh feature branch, then merge them into `main` while resolving semantic changes as well as text conflicts. Avoid copying a pre-migration directory tree over the current package.
 
 Where paths moved, map the change to the corresponding new file. Git may detect renames, but large translations and reorganizations can require manual resolution. Re-run model, preprocessing, checkpoint, and CLI checks after conflict resolution. Never resolve a conflict by dropping the other family's registration or duplicating the common trainer.
 

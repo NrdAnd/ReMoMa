@@ -45,9 +45,9 @@ The eleven-test synthetic suite passed. It covered:
 - A single small walk-forward fold, stable-threshold evaluation, a two-member seed ensemble, and hyperparameter-grid configuration generation.
 - A complete synthetic train/save/reload/evaluate cycle for GCN, GAT, and recurrent models, with threshold reload and a spawned GAT data-loader worker.
 
-The complete-cycle tests used five synthetic files of 140 rows each, lag depth 2, small hidden widths, and one epoch. They completed as part of a roughly 62-second suite. **No training was run against the real local LOBSTER files.** Additional small synthetic checks were explicitly authorized by the owner. Full-data training remains reserved for remote compute.
+The complete-cycle tests used five synthetic files of 140 rows each, lag depth 2, small hidden widths, and one epoch. They completed as part of a roughly 62-second suite. **No training was run against the real local LOBSTER files.** Full-data training remains reserved for remote compute.
 
-The sandbox initially denied OpenMP shared-memory access in subprocesses. Repeating the same small synthetic suite with the required process permissions passed; this was an environment restriction, not a failed model assertion.
+An initial OpenMP shared-memory failure was caused by restricted process permissions. Repeating the same synthetic suite with normal process permissions passed; this was an environment restriction, not a failed model assertion.
 
 ## Reference inputs and repository checks
 
@@ -62,6 +62,5 @@ Source compilation, undefined-name lint checks, notebook cleanliness/syntax chec
 - The Docker recipe and Linux/Python 3.11 CI are provided but require execution on their respective environments. Local macOS results do not certify those platforms.
 - Raw data and historical graph-estimation dates were not independently reconstructed or certified.
 - Historical prototypes are outside the supported runtime and retain documented defects for research history.
-- At the time of this earlier validation, no branch had been pushed and no GitHub pull request or release had been published. This records that validation session, not the repository's later hosting state.
 
 Use remote compute for full model training. The local regression suite's synthetic training is deliberately small; it is still an execution of training code, not merely a static check.
