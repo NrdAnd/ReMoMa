@@ -11,7 +11,7 @@ from remoma.dataset.binning import VolumeBinner
 from remoma.graph.adjacency import sha256_file
 from remoma.dataset.labeling import compute_labels
 from remoma.dataset.order_flow import load_message_csv, per_event_order_flow
-from remoma.utils.io import discover_files, discover_message_files, load_lobster_csv
+from remoma.utils.io import configured_orderbooks, discover_message_files, load_lobster_csv, cached_orderbook
 
 # LOBSTER 40-column layout (10 levels, ask/bid, price/volume)
 _ASK_P_COLS = np.arange(0, 40, 4)
@@ -222,7 +222,8 @@ def preprocess_signature(cfg: dict[str, Any]) -> dict[str, Any]:
         data_cfg.get("extra_node_features")
     )
     sig: dict[str, Any] = {
-        "schema_version": 2,
+        "schema_version": 3,
+        "storage_mode": data_cfg.get("storage_mode", "materialized"),
         "subsample_seed": int(data_cfg.get("subsample_seed", 42)),
         "n_lags": int(data_cfg["n_lags"]),
         "n_levels": int(data_cfg["n_levels"]),
@@ -288,7 +289,12 @@ def has_compatible_processed_dataset(cfg: dict[str, Any]) -> bool:
     if meta.get("signature") != preprocess_signature(cfg):
         return False
 
-    raw_paths = discover_files(cfg["data"]["raw_dir"])
+    try:
+        raw_paths = configured_orderbooks(cfg["data"])
+    except FileNotFoundError:
+        if not cfg["data"].get("allow_missing_raw", False):
+            return False
+        raw_paths = []
     if not raw_paths:
         if not cfg["data"].get("allow_missing_raw", False):
             return False
@@ -310,10 +316,18 @@ def has_compatible_processed_dataset(cfg: dict[str, Any]) -> bool:
         for split in ("train", "val", "test"):
             x = np.load(paths[f"X_{split}"], mmap_mode="r", allow_pickle=False)
             y = np.load(paths[f"y_{split}"], mmap_mode="r", allow_pickle=False)
-            expected = (meta["counts"][split], meta["n_nodes"], meta["n_features"])
+            expected = ((meta["counts"][split], 2) if meta.get("storage_mode") == "indexed"
+                        else (meta["counts"][split], meta["n_nodes"], meta["n_features"]))
             if x.shape != expected or y.shape != (expected[0],) or expected[0] == 0:
                 return False
-            if x.dtype != np.dtype(meta["feature_dtype"]) or y.dtype != np.int64:
+            x_dtype = np.dtype("int32" if meta.get("storage_mode") == "indexed" else meta["feature_dtype"])
+            if x.dtype != x_dtype or y.dtype != np.int64:
+                return False
+        for artifact in meta.get("indexed_artifacts", []):
+            if sha256_file(artifact["path"]) != artifact["sha256"]:
+                return False
+        for name, digest in meta.get("artifact_hashes", {}).items():
+            if sha256_file(paths["dir"] / name) != digest:
                 return False
     except (OSError, ValueError, KeyError):
         return False
@@ -353,6 +367,7 @@ def _extract_chunk_features_with_extras(
     normalize_prices: bool,
     extra_node_features: list[str],
     order_flow: np.ndarray | None = None,
+    binned_volumes: np.ndarray | None = None,
 ) -> np.ndarray:
     """Build base price/volume channels plus optional engineered node channels."""
     # idx[b, k] = timestamp for lag k (k=0 => t, k=n_lags => oldest)
@@ -384,7 +399,13 @@ def _extract_chunk_features_with_extras(
         ask_prices = ask_prices_raw
         bid_prices = bid_prices_raw
 
-    ask_vols_b, bid_vols_b = binner.transform_window(ask_vols, bid_vols)
+    if binned_volumes is None:
+        ask_vols_b, bid_vols_b = binner.transform_window(ask_vols, bid_vols)
+    else:
+        # Bins are frozen per training split and computed once per raw row.
+        volume_window = binned_volumes[idx]
+        ask_vols_b = volume_window[:, :, :10].transpose(0, 2, 1)
+        bid_vols_b = volume_window[:, :, 10:].transpose(0, 2, 1)
     order_flow_windows = None
     if uses_order_flow_features(extra_node_features):
         if order_flow is None:
@@ -461,7 +482,8 @@ def _extract_chunk_features_with_extras(
             raise AssertionError(f"Unhandled extra node feature: {name}")
         channel += 1
 
-    np.nan_to_num(out, copy=False, nan=0.0, posinf=0.0, neginf=0.0)
+    if not np.isfinite(out).all():
+        raise ValueError("Non-finite features; check raw data and normalization.")
     return out
 
 
@@ -566,7 +588,7 @@ def preprocess_to_disk(
             print("Using existing compatible processed dataset.")
         return paths
 
-    raw_files = discover_files(data_cfg["raw_dir"])
+    raw_files = configured_orderbooks(data_cfg)
     if not raw_files:
         raise FileNotFoundError(f"No LOBSTER files found in '{data_cfg['raw_dir']}'")
 
@@ -574,7 +596,15 @@ def preprocess_to_disk(
 
     if verbose:
         print("Loading raw LOBSTER files...")
-    all_data = [load_lobster_csv(f) for f in raw_files]
+    storage_mode = data_cfg.get("storage_mode", "materialized")
+    cached_paths = []
+    if storage_mode == "indexed" or data_cfg.get("raw_cache_dir"):
+        cache = Path(data_cfg.get("raw_cache_dir", paths["dir"] / "raw_cache"))
+        loaded = [cached_orderbook(f, cache) for f in raw_files]
+        all_data = [pair[0] for pair in loaded]
+        cached_paths = [pair[1] for pair in loaded]
+    else:
+        all_data = [load_lobster_csv(f) for f in raw_files]
     if verbose:
         for f, d in zip(raw_files, all_data):
             print(f"  {f.name}: {d.shape[0]:,} ticks")
@@ -676,7 +706,7 @@ def preprocess_to_disk(
     binner.save(paths["binner"])
 
     # Kept for backward compatibility with existing evaluation/checkpoint flows.
-    if normalize_prices and train_file_indices:
+    if normalize_prices and train_file_indices and storage_mode == "materialized":
         np.save(paths["price_stats"], build_price_stats(list(range(len(fit_data))), fit_data))
 
     if verbose:
@@ -693,6 +723,46 @@ def preprocess_to_disk(
             + ")"
         )
 
+    indexed_metadata = {}
+    if storage_mode == "indexed":
+        from remoma.dataset.indexed import write_indexed_splits
+        indexed_metadata = write_indexed_splits(
+            paths, {"train": train_s, "val": val_s, "test": test_s}, all_data,
+            all_labels, all_order_flow, binner, cached_paths, chunk,
+        )
+    else:
+        _write_materialized_splits(
+            paths, train_s, val_s, test_s, all_data, all_labels, all_order_flow,
+            binner, n_lags, n_levels, normalize_prices, extra_node_features, feature_dtype, chunk, verbose,
+        )
+
+    meta = {
+        "signature": preprocess_signature(cfg),
+        "storage_mode": storage_mode,
+        "raw_files": [f.name for f in raw_files],
+        "raw_manifest": file_manifest(raw_files),
+        "message_manifest": file_manifest(message_files),
+        "message_files": [f.name for f in message_files],
+        "counts": {"train": int(len(train_s)), "val": int(len(val_s)), "test": int(len(test_s))},
+        "n_nodes": int(2 * n_levels * (n_lags + 1)),
+        "n_features": int(n_node_features),
+        "extra_node_features": extra_node_features,
+        "feature_dtype": str(feature_dtype), "chunk_size": chunk,
+        **indexed_metadata,
+    }
+    if storage_mode == "indexed":
+        meta["artifact_hashes"] = {paths[name].name: sha256_file(paths[name])
+                                  for name in ("X_train", "y_train", "X_val", "y_val", "X_test", "y_test", "binner")}
+    from remoma.utils.artifacts import write_json
+    write_json(paths["meta"], meta)
+    if verbose:
+        print(f"Processed dataset ready ({storage_mode}).")
+    return paths
+
+
+def _write_materialized_splits(paths, train_s, val_s, test_s, all_data, all_labels, all_order_flow,
+                               binner, n_lags, n_levels, normalize_prices, extra_node_features,
+                               feature_dtype, chunk, verbose):
     _write_split_memmap(
         split_name="train",
         samples=train_s,
@@ -744,27 +814,3 @@ def preprocess_to_disk(
         chunk_size=chunk,
         verbose=verbose,
     )
-
-    meta = {
-        "signature": preprocess_signature(cfg),
-        "raw_files": [f.name for f in raw_files],
-        "raw_manifest": file_manifest(raw_files),
-        "message_manifest": file_manifest(message_files),
-        "message_files": [f.name for f in message_files],
-        "counts": {
-            "train": int(len(train_s)),
-            "val": int(len(val_s)),
-            "test": int(len(test_s)),
-        },
-        "n_nodes": int(2 * n_levels * (n_lags + 1)),
-        "n_features": int(n_node_features),
-        "extra_node_features": extra_node_features,
-        "feature_dtype": str(feature_dtype),
-        "chunk_size": chunk,
-    }
-    with open(paths["meta"], "w", encoding="utf-8") as f:
-        json.dump(meta, f, indent=2, sort_keys=True)
-
-    if verbose:
-        print("Processed dataset ready.")
-    return paths

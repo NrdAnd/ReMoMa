@@ -42,6 +42,12 @@ def main() -> int:
     configs = [p for p in (ROOT / "configs").rglob("*.yaml") if "local" not in p.parts]
     for path in configs:
         try:
+            if path.parent.name == "pipeline":
+                from remoma.pipeline.specification import load_spec, model_configuration
+                spec = load_spec(path)
+                for model in spec["models"]:
+                    model_configuration(spec, model)
+                continue
             cfg = load_config(path)
             if not Path(cfg["data"]["adj_matrix_path"]).is_file():
                 errors.append(f"{path.relative_to(ROOT)}: missing reference graph")

@@ -39,20 +39,48 @@ def load_labeled_adjacency(path: str | Path) -> pd.DataFrame:
     one-based levels (ASKs1_lag0). Matrix order is retained for recurrent models.
     """
     path = Path(path)
-    frame = pd.read_csv(path, sep="\t" if path.suffix.lower() == ".tsv" else ",", index_col=0)
+    if path.suffix.lower() == ".npz":
+        with np.load(path, allow_pickle=False) as saved:
+            if str(saved["format"]) != "remoma_coo_v1":
+                raise ValueError("Unsupported adjacency archive format.")
+            labels = saved["labels"].tolist()
+            edges, weights = saved["edges"], saved["weights"]
+            if (edges.ndim != 2 or edges.shape[0] != 2 or weights.shape != (edges.shape[1],)
+                    or not np.issubdtype(edges.dtype, np.integer)):
+                raise ValueError("Malformed sparse adjacency arrays.")
+            if (edges < 0).any() or (edges >= len(labels)).any():
+                raise ValueError("Sparse adjacency contains out-of-range nodes.")
+            if len(np.unique(edges[0] * len(labels) + edges[1])) != edges.shape[1]:
+                raise ValueError("Sparse adjacency contains duplicate edges.")
+            values = np.zeros((len(labels), len(labels)), dtype=np.float64)
+            values[edges[0], edges[1]] = weights
+            frame = pd.DataFrame(values, index=labels, columns=labels)
+    else:
+        frame = pd.read_csv(path, sep="\t" if path.suffix.lower() == ".tsv" else ",", index_col=0)
     if frame.empty or frame.shape[0] != frame.shape[1]:
         raise ValueError(f"Adjacency must be a nonempty square matrix ({path}).")
     rows = [canonical_label(label) for label in frame.index]
     columns = [canonical_label(label) for label in frame.columns]
     if rows != columns or len(set(rows)) != len(rows):
         raise ValueError("Adjacency axes must have identical, unique labels in the same order.")
-    values = frame.to_numpy(dtype=np.float32)
+    values = frame.to_numpy(dtype=np.float64)
     if not np.isfinite(values).all() or (values < 0).any():
         raise ValueError("Adjacency weights must be finite and nonnegative.")
     if not np.allclose(values, values.T, rtol=1e-5, atol=1e-8):
         raise ValueError("Adjacency must be symmetric.")
     frame.index, frame.columns = rows, columns
     return frame
+
+
+def save_sparse_adjacency(path: str | Path, values: np.ndarray, labels: list[str]) -> None:
+    """Store labeled COO edges using lossless compression, without dense CSV zeros."""
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    rows, columns = np.nonzero(values)
+    temporary = path.with_suffix(".partial.npz")
+    np.savez_compressed(temporary, format="remoma_coo_v1", labels=np.asarray(labels),
+                        edges=np.stack((rows, columns)).astype(np.int32), weights=values[rows, columns])
+    temporary.replace(path)
 
 
 def load_tmfg_edge_index(

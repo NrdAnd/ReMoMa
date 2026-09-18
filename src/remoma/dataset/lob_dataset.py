@@ -4,6 +4,7 @@ from torch.utils.data import Dataset as TorchDataset
 from torch_geometric.data import Data, Dataset
 
 from remoma.dataset.binning import VolumeBinner
+from remoma.dataset.indexed import FeatureReader
 
 # Column index groups (LOBSTER 40-column format, 0-indexed levels)
 _ASK_P_COLS = np.arange(0, 40, 4)   # AskPrice: cols 0,4,8,...,36
@@ -41,6 +42,7 @@ class FastLOBDataset(Dataset):
         self.X = None
         self.y = None
         self.edge_index = edge_index
+        self.reader = FeatureReader(x_path)
 
     def _ensure_open(self) -> None:
         # Lazily open memmaps per worker process.
@@ -55,12 +57,22 @@ class FastLOBDataset(Dataset):
         self._ensure_open()
         # float16->float32 cast allocates once; if already float32 on disk,
         # copy only when needed to get a writable NumPy buffer for torch.
-        x_np = np.asarray(self.X[idx], dtype=np.float32)
+        x_np = self.reader.read([idx])[0]
         if not x_np.flags.writeable:
             x_np = x_np.copy()
         x = torch.from_numpy(x_np)
         y = torch.tensor(int(self.y[idx]), dtype=torch.long)
         return Data(x=x, edge_index=self.edge_index, y=y)
+
+    def __getitems__(self, indices):
+        self._ensure_open()
+        features = self.reader.read(indices)
+        return [Data(x=torch.from_numpy(x), edge_index=self.edge_index,
+                     y=torch.tensor(int(self.y[index]), dtype=torch.long))
+                for x, index in zip(features, indices)]
+
+    def __getstate__(self):
+        return {**self.__dict__, "X": None, "y": None}
 
 
 class StaticLOBTensorDataset(TorchDataset):
@@ -88,6 +100,7 @@ class StaticLOBTensorDataset(TorchDataset):
         self._len = int(len(y))
         self.X = None
         self.y = None
+        self.reader = FeatureReader(x_path)
 
     def _ensure_open(self) -> None:
         # Lazily open memmaps per worker process.
@@ -102,12 +115,21 @@ class StaticLOBTensorDataset(TorchDataset):
         self._ensure_open()
         # float16->float32 cast allocates once; if already float32 on disk,
         # copy only when needed to get a writable NumPy buffer for torch.
-        x_np = np.asarray(self.X[idx], dtype=np.float32)
+        x_np = self.reader.read([idx])[0]
         if not x_np.flags.writeable:
             x_np = x_np.copy()
         x = torch.from_numpy(x_np)
         y = torch.tensor(int(self.y[idx]), dtype=torch.long)
         return x, y
+
+    def __getitems__(self, indices):
+        self._ensure_open()
+        features = self.reader.read(indices)
+        return [(torch.from_numpy(x), torch.tensor(int(self.y[index]), dtype=torch.long))
+                for x, index in zip(features, indices)]
+
+    def __getstate__(self):
+        return {**self.__dict__, "X": None, "y": None}
 
 
 class LOBDataset(Dataset):

@@ -84,6 +84,13 @@ class TMFG:
         """
         if isinstance(weights, pd.DataFrame):
             weights = weights.to_numpy()
+        weights = np.asarray(weights)
+        if weights.ndim != 2 or weights.shape[0] != weights.shape[1] or len(weights) < 4:
+            raise ValueError("TMFG requires a square matrix with at least four nodes.")
+        if not np.isfinite(weights).all() or (weights < 0).any():
+            raise ValueError("TMFG similarities must be finite and nonnegative.")
+        if not np.allclose(weights, weights.T, rtol=1e-12, atol=1e-12):
+            raise ValueError("TMFG similarities must be symmetric.")
         self._W = weights.copy()
 
         if cov is not None:
@@ -234,7 +241,7 @@ class TMFG:
         mean_val = np.mean(self._W)
         v = np.sum(np.multiply(self._W, (self._W > mean_val)), axis=1)
         # [::-1] added to prevent regression, but it is not needed
-        return list(np.argsort(v)[-4:][::-1])
+        return list(np.argsort(v, kind="stable")[-4:][::-1])
 
     def _triangle_columns_sum(self, triangle: tuple[int]) -> np.ndarray:
         """
@@ -282,7 +289,11 @@ class TMFG:
         """
         gvec = self._triangle_columns_sum(tuple(triangle))
         # Only consider vertices not yet inserted
-        gvec *= self._remaining_vertices_mask
+        # Zero is a valid gain. Multiplication by a mask could repeatedly select
+        # an already inserted zero-gain vertex and leave the heap loop stuck.
+        if not self._remaining_vertices_mask.any():
+            return 0, float("-inf")
+        gvec = np.where(self._remaining_vertices_mask, gvec, -np.inf)
 
         best_v = np.argmax(gvec)
         best_gain = gvec[best_v]

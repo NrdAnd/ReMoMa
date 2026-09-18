@@ -26,7 +26,7 @@ The two base channels are price relative to the current sample's best-level mid-
 
 Optional channels are `spread`, `level_imbalance`, `depth_imbalance`, `microprice`, `order_trade_flow`, `order_limit_flow`, `order_cancel_flow`, and `side`. Their order is part of the checkpoint contract. Duplicate or unknown feature names are rejected. The recurrent and GNN constructors both derive their input width from this list.
 
-Volume quantiles are fitted only on rows covered by training input windows, before class balancing or sample caps. Non-finite volumes are mapped to the lowest bin; non-finite prices/features are rejected. Store data-cleaning provenance separately from model configuration.
+Volume quantiles are fitted only on rows covered by training input windows, before class balancing or sample caps. Raw non-finite/negative volumes and non-finite prices/features are rejected. Store data-cleaning provenance separately from model configuration.
 
 ## Temporal splits
 
@@ -42,19 +42,21 @@ Volume quantiles are fitted only on rows covered by training input windows, befo
 
 `data.processed_dir` contains `X_*.npy`, `y_*.npy`, `binner.pkl`, `meta.json`, and an optional legacy `price_stats.npy`. GNN commands also cache `edge_index.pt`.
 
-The metadata signature covers preprocessing schema, dimensions, feature order, labels, split settings, sampling caps, and sampling seed. Raw/message manifests contain filenames and SHA-256 hashes. Compatibility also checks tensor shapes and dtypes. Hashing raw inputs adds I/O during cache checks. Feature-array contents themselves are not cryptographically hashed by this check.
+The metadata signature covers preprocessing schema, storage mode, dimensions, feature order, labels, split settings, sampling caps, and sampling seed. Raw/message manifests contain filenames and SHA-256 hashes. Compatibility also checks tensor shapes and dtypes. Hashing raw inputs adds I/O during cache checks. Indexed storage additionally verifies the content hashes of raw binary arrays, pre-binned volumes, flow arrays, sample indices, labels, and binner. Materialized feature-array contents are checked by shape/dtype rather than a complete hash.
 
-Schema version 2 intentionally invalidates old caches because temporal purging and scaler-fit boundaries changed. Metadata is removed before rebuilding, so an interrupted rebuild is not reusable. Use separate processed directories for simultaneous preprocess jobs; concurrent writers to the same cache are unsupported.
+Schema version 3 distinguishes indexed and materialized storage and invalidates earlier caches. Version 2 introduced temporal purging and corrected scaler-fit boundaries. Metadata is removed before rebuilding, so an interrupted rebuild is not reusable. The complete pipeline locks cache writes; direct lower-level preprocessing commands must not write concurrently to the same directory.
+
+With `storage_mode: materialized`, `X_*.npy` contains `[samples, nodes, channels]` tensors. With `storage_mode: indexed`, it contains int32 `[file_index, event_index]` rows; metadata identifies shared raw arrays and fold-specific pre-binned volumes. Dataset readers construct the same feature tensors batch by batch. `data.raw_files` freezes the exact chronological file list, preventing newly discovered files from shifting split indices. `data.raw_cache_dir` shares parsed CSV arrays between folds.
 
 Raw inputs are required for verification by default. `data.allow_missing_raw: true` explicitly permits use of complete compatible caches when raw files are unavailable. In that mode, raw-content provenance cannot be rechecked. Keep this exception limited to controlled evaluation deployments.
 
 ## Graphs and provenance
 
-CSV and TSV adjacency files must have identical unique row/column labels, square finite nonnegative weights, and symmetry. Both label conventions are accepted:
+CSV and TSV adjacency files must have identical unique row/column labels, square finite nonnegative weights, and symmetry. The pipeline also writes labeled compressed COO `.npz` graphs, with the same validation rules. Both label conventions are accepted:
 
 - Legacy: `ask_0_lag_0`, `bid_0_lag_0` (zero-based levels).
 - Canonical: `ASKs1_lag0`, `BIDs1_lag0` (one-based levels).
 
 GNN edges are reordered to canonical feature order; nonzero weights become binary connectivity. Recurrent models retain matrix order internally and can use the weights when enabled. Graph caches are bound to graph content and requested dimensions.
 
-The versioned graphs are historical reference inputs. Their filenames describe transformations but do not establish which dates were used to estimate the similarity matrix. A held-out test day does not eliminate leakage if the graph was estimated using that day. For a defensible evaluation, estimate similarities and graphs from training data only, freeze them before validation, and record source dates and hashes. The current graph builders accept a supplied matrix; they cannot infer or enforce its temporal provenance.
+The versioned graphs are historical reference inputs. Their filenames describe transformations but do not establish which dates were used to estimate the similarity matrix. A held-out test day does not eliminate leakage if the graph was estimated using that day. For a defensible evaluation, estimate similarities and graphs from training data only, freeze them before validation, and record source dates and hashes. The older matrix-conversion scripts accept a supplied matrix and cannot infer its temporal provenance. The [complete pipeline](pipeline.md) instead constructs each graph from its declared training dates, records hashes, and never uses the historical reference graphs for its runs.

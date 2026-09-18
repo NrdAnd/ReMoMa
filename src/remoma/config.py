@@ -28,7 +28,7 @@ def load_config(path: str | Path) -> dict[str, Any]:
     for section in ("data", "model", "training", "paths"):
         if not isinstance(cfg.get(section), dict):
             raise ValueError(f"Configuration requires a '{section}' mapping.")
-    for key in ("raw_dir", "message_dir", "adj_matrix_path", "processed_dir"):
+    for key in ("raw_dir", "message_dir", "adj_matrix_path", "processed_dir", "raw_cache_dir"):
         if cfg["data"].get(key) is not None:
             cfg["data"][key] = str(project_path(cfg["data"][key]))
     for key, value in cfg["paths"].items():
@@ -54,6 +54,8 @@ def validate_config(cfg: dict[str, Any]) -> None:
         raise ValueError("data.threshold must be nonnegative.")
     if data.get("feature_dtype", "float16") not in {"float16", "float32"}:
         raise ValueError("data.feature_dtype must be float16 or float32.")
+    if data.get("storage_mode", "materialized") not in {"materialized", "indexed"}:
+        raise ValueError("data.storage_mode must be materialized or indexed.")
     for key in ("max_samples_per_class", "max_val_samples", "max_test_samples"):
         if data.get(key) is not None and int(data[key]) < 1:
             raise ValueError(f"data.{key} must be positive or null.")

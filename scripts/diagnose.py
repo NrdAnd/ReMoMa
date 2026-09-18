@@ -26,13 +26,14 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 from remoma.config import load_config
 
 from remoma.dataset.preprocessing import build_processed_paths
+from remoma.dataset.indexed import FeatureReader
 from remoma.graph.adjacency import load_tmfg_edge_index
 from remoma.models import build_model, is_recurrent_sparse_model, supports_static_batching
 
 
 def load_real_batch(paths, n: int, num_nodes: int, balanced: bool = True):
     """Load n real samples from the train split (optionally class-balanced)."""
-    X = np.load(paths["X_train"], mmap_mode="r")
+    reader = FeatureReader(paths["X_train"])
     y = np.load(paths["y_train"], mmap_mode="r")
     y_full = np.asarray(y)
 
@@ -45,9 +46,9 @@ def load_real_batch(paths, n: int, num_nodes: int, balanced: bool = True):
             idx.append(rng.choice(pool, size=min(per, len(pool)), replace=False))
         idx = np.sort(np.concatenate(idx))
     else:
-        idx = np.arange(n)
+        idx = np.arange(min(n, len(y)))
 
-    x_np = np.asarray(X[idx], dtype=np.float32)          # [n, num_nodes, 2]
+    x_np = reader.read(idx)
     y_np = y_full[idx].astype(np.int64)
     assert x_np.shape[1] == num_nodes, (x_np.shape, num_nodes)
     return torch.from_numpy(x_np), torch.from_numpy(y_np)

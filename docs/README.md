@@ -6,6 +6,7 @@
 | [Architecture](architecture.md) | Package boundaries, model registry, batching, tensor contracts |
 | [Data](data.md) | LOBSTER schema, graph labels, temporal splits, cache semantics |
 | [Usage](usage.md) | Preprocessing, training, evaluation, threshold tuning, experiment runners |
+| [Complete pipeline](pipeline.md) | Raw CSCO files, training-only NMI/TMFG, fixed and walk-forward benchmarks |
 | [Development](development.md) | Contributor workflow and regression checks |
 | [Merging](merging.md) | Recorded merge, migration map, future branch synchronization |
 | [Deployment](deployment.md) | Batch execution, container use, publication procedure |

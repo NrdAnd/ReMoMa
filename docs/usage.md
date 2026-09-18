@@ -6,7 +6,7 @@ Run commands from the repository root in the installed environment. `--help` lis
 
 Start from a complete configuration in `configs/gnn/` or `configs/recurrent/`. Copy it to `configs/local/` for private paths and experiment-specific changes. The `model.type` key chooses the architecture; `model.family` validates the family.
 
-For a controlled family comparison, match raw files, labels, split, lag depth, base/engineered features, sampling seed, graph provenance, and evaluation rule. The default GNN and recurrent presets have different lag depths and are not a matched comparison by themselves.
+For a controlled family comparison, match raw files, labels, split, lag depth, base/engineered features, sampling seed, graph provenance, and evaluation rule. The default GNN and recurrent presets have different lag depths and are not a matched comparison by themselves. Use the [complete pipeline](pipeline.md) for the matched CSCO benchmark, with training-only NMI/TMFG generated automatically for every split.
 
 ```bash
 python scripts/train.py --config configs/gnn/default.yaml --model sage --seed 43
@@ -45,7 +45,7 @@ runs/cgnn_seed42/
   metadata.json           Git revision, environment, model contract, graph/binner hashes
   binner.pkl              Snapshot of the fitted training-volume bins
   preprocessing_meta.json Snapshot of data manifests and preprocessing semantics
-  adjacency.csv           Snapshot of the graph (or adjacency.tsv)
+  adjacency.csv           Snapshot of the graph (or adjacency.tsv / adjacency.npz)
   metrics.csv             Per-epoch training/validation metrics
   thresholds.json         Present when training.tune_threshold is enabled
   results/
@@ -107,7 +107,7 @@ python scripts/run_hparam_grid.py \
   --message-iterations 1 --max-combos 2
 ```
 
-Generated configurations and summaries live under `runs/generated_configs/`. The runners isolate processed caches and checkpoint directories per fold/combination. The hyperparameter grid varies recurrent parameters; it is not a generic GNN grid.
+Generated configurations and summaries live under `runs/generated_configs/`. These historical runners isolate processed caches and checkpoint directories per fold/combination, but retain their supplied graph across folds. Use `scripts/run_pipeline.py --mode walk_forward` for automatic training-only graph construction. The hyperparameter grid varies recurrent parameters; it is not a generic GNN grid.
 
 `run_stable_thresholds.py` and `run_walk_forward_ensemble.py` retain historical experiments that aggregate thresholds across selected folds. Applying a threshold estimated from later folds to earlier tests is a **retrospective diagnostic**, not a prospective backtest. Use a separate earlier calibration period and a later untouched test period for a deployable threshold policy. These scripts do not automatically enforce that cross-fold temporal restriction.
 

@@ -13,6 +13,8 @@ python -m build
 
 The CI workflow runs these checks on Linux CPU with Python 3.10 and 3.11. Tests create synthetic data in temporary directories and require no LOBSTER download. The suite executes tiny one-epoch training checks for three architectures; run it on an appropriate host if local training execution is prohibited. Static checks and CLI help inspection can be run separately. `ruff` checks undefined names and syntax-level errors; it is not configured as a broad style rewrite.
 
+`tests/test_complete_pipeline.py` covers the maintained orchestration, training-only graph construction, both NMI estimators, indexed feature equivalence, threshold-search equivalence, cache integrity, and resume behavior. Its CUDA parity test is opt-in; see [pipeline verification](pipeline.md#verification-boundaries). The complete experiment entry point is `scripts/run_pipeline.py`; omitting `--run` only inspects the plan. Record actual verification results and platform limits in [validation](validation.md).
+
 ## Adding or changing a model
 
 1. Add the implementation under `src/remoma/models/gnn/` or `src/remoma/models/recurrent/`.

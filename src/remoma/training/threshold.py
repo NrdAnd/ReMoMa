@@ -106,6 +106,61 @@ def _score_metrics(
     )
 
 
+def metrics_from_confusion(cm: np.ndarray) -> dict:
+    """Compute fixed-three-class and directional metrics from sufficient counts."""
+    cm = np.asarray(cm, dtype=np.float64)
+    support, predicted = cm.sum(axis=1), cm.sum(axis=0)
+    n = cm.sum()
+    if n <= 0:
+        raise ValueError("Metrics require at least one sample.")
+    diagonal = np.diag(cm)
+    denom = support + predicted
+    f1 = np.divide(2 * diagonal, denom, out=np.zeros(3), where=denom != 0)
+    signal_correct = diagonal[0] + diagonal[2]
+    pred_signal, true_signal = predicted[0] + predicted[2], support[0] + support[2]
+    precision = float(signal_correct / pred_signal) if pred_signal else 0.0
+    recall = float(signal_correct / true_signal) if true_signal else 0.0
+    mcc_denom = np.sqrt((n * n - (predicted ** 2).sum()) * (n * n - (support ** 2).sum()))
+    return {"accuracy": float(diagonal.sum() / n), "f1_macro": float(f1.mean()),
+            "f1_weighted": float(np.dot(f1, support) / n), "f1_per_class": f1.tolist(),
+            "mcc": float((diagonal.sum() * n - np.dot(support, predicted)) / mcc_denom) if mcc_denom else 0.0,
+            "signal_precision": precision, "signal_recall": recall,
+            "signal_f1": 2 * precision * recall / (precision + recall) if precision + recall else 0.0,
+            "signal_rate": float(pred_signal / n), "true_signal_rate": float(true_signal / n),
+            "flat_to_signal_rate": float((cm[1, 0] + cm[1, 2]) / support[1]) if support[1] else 0.0,
+            "opposite_direction_rate": float((cm[0, 2] + cm[2, 0]) / true_signal) if true_signal else 0.0}
+
+
+def _threshold_confusions(probs, labels, grid):
+    """Exact grid counts in O(N + G^2), respecting the up-wins-ties rule."""
+    probs, labels = np.asarray(probs), np.asarray(labels)
+    if (probs.shape != (len(labels), 3) or not len(labels) or not np.isfinite(probs).all()
+            or not np.isin(labels, [0, 1, 2]).all()):
+        raise ValueError("Threshold search needs finite [N,3] probabilities and valid labels.")
+    g = len(grid)
+    # Match NumPy's scalar comparison promotion in apply_thresholds, including
+    # probabilities exactly equal to a float32 representation of a grid value.
+    comparison_grid = grid.astype(probs.dtype)
+    a = np.searchsorted(comparison_grid, probs[:, 0], side="right")
+    b = np.searchsorted(comparison_grid, probs[:, 2], side="right")
+    up_wins = probs[:, 2] >= probs[:, 0]
+    matrices = np.zeros((g, g, 3, 3), dtype=np.int64)
+    for label in range(3):
+        count = int((labels == label).sum())
+        for winner in (False, True):
+            selected = (labels == label) & (up_wins == winner)
+            hist = np.bincount(a[selected] * (g + 1) + b[selected], minlength=(g + 1) ** 2)
+            cumulative = hist.reshape(g + 1, g + 1).cumsum(0).cumsum(1)
+            if winner:
+                matrices[:, :, label, 2] += cumulative[g, g] - cumulative[g, :g][None, :]
+                matrices[:, :, label, 0] += cumulative[g, :g][None, :] - cumulative[:g, :g]
+            else:
+                matrices[:, :, label, 0] += cumulative[g, g] - cumulative[:g, g][:, None]
+                matrices[:, :, label, 2] += cumulative[:g, g][:, None] - cumulative[:g, :g]
+        matrices[:, :, label, 1] = count - matrices[:, :, label, 0] - matrices[:, :, label, 2]
+    return matrices
+
+
 def search_thresholds(
     val_probs: np.ndarray,
     val_labels: np.ndarray,
@@ -122,13 +177,18 @@ def search_thresholds(
     """Grid-search thresholds with optional directional-signal constraints."""
     if not (0 <= lo <= hi <= 1) or step <= 0:
         raise ValueError("Threshold grid requires 0 <= lo <= hi <= 1 and step > 0.")
-    grid = np.round(np.arange(lo, hi + 1e-9, step), 3)
+    if not np.isfinite([lo, hi, step]).all() or step < .001:
+        raise ValueError("Threshold search uses 0.001 resolution; set a finite step >= 0.001.")
+    grid = np.unique(np.round(np.arange(lo, hi + 1e-9, step), 3))
+    matrices = _threshold_confusions(val_probs, val_labels, grid)
     best: dict | None = None
 
-    for td in grid:
-        for tu in grid:
-            preds = apply_thresholds(val_probs, float(td), float(tu))
-            metrics = decision_metrics(preds, val_labels)
+    for i, td in enumerate(grid):
+        for j, tu in enumerate(grid):
+            # Keep the public threshold-search metric contract scalar-only.
+            # Existing fold/ensemble reporters flatten this dictionary.
+            metrics = {key: value for key, value in metrics_from_confusion(matrices[i, j]).items()
+                       if key not in {"f1_per_class", "mcc"}}
 
             if (
                 min_signal_precision is not None

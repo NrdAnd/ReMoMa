@@ -155,11 +155,11 @@ class Trainer:
             loss = self.criterion(out, y)
 
             total_loss += loss.item() * num_graphs
-            all_preds.extend(out.argmax(1).cpu().numpy())
-            all_labels.extend(y.cpu().numpy())
+            all_preds.append(out.argmax(1).cpu().numpy())
+            all_labels.append(y.cpu().numpy())
 
-        preds  = np.array(all_preds)
-        labels = np.array(all_labels)
+        preds  = np.concatenate(all_preds)
+        labels = np.concatenate(all_labels)
         avg_loss = total_loss / len(labels)
         acc = (preds == labels).mean()
         f1  = f1_score(labels, preds, labels=[0, 1, 2], average="macro", zero_division=0)
@@ -173,10 +173,10 @@ class Trainer:
 
         for batch in tqdm(loader, desc="  predict", leave=False, unit="batch"):
             out, y, _ = self._forward_batch(batch)
-            all_preds.extend(out.argmax(1).cpu().numpy())
-            all_labels.extend(y.cpu().numpy())
+            all_preds.append(out.argmax(1).cpu().numpy())
+            all_labels.append(y.cpu().numpy())
 
-        return np.array(all_preds), np.array(all_labels)
+        return np.concatenate(all_preds), np.concatenate(all_labels)
 
     @torch.no_grad()
     def predict_proba(self, loader) -> tuple[np.ndarray, np.ndarray]:
@@ -187,9 +187,9 @@ class Trainer:
         for batch in tqdm(loader, desc="  predict", leave=False, unit="batch"):
             out, y, _ = self._forward_batch(batch)
             all_probs.append(torch.softmax(out, dim=1).cpu().numpy())
-            all_labels.extend(y.cpu().numpy())
+            all_labels.append(y.cpu().numpy())
 
-        return np.concatenate(all_probs), np.array(all_labels)
+        return np.concatenate(all_probs), np.concatenate(all_labels)
 
     def load_best(self) -> None:
         self.model.load_state_dict(

@@ -21,6 +21,7 @@ dependencies = [
 [project.optional-dependencies]
 research = ["jupyterlab", "matplotlib", "seaborn", "networkx", "plotly", "pyvis", "scipy"]
 dev = ["build", "ruff"]
+nmi-cuda = ["cupy-cuda12x==13.6.0"]
 
 [tool.setuptools.packages.find]
 where = ["src"]

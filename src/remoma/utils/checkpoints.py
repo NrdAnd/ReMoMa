@@ -59,6 +59,11 @@ def save_run_configuration(cfg: dict, directory: Path) -> dict:
     metadata = {"schema_version": 1, "git_commit": revision, "tracked_worktree_dirty": dirty,
                 "python": platform.python_version(), "torch": str(torch.__version__),
                 "graph_sha256": sha256_file(target), "contract": model_contract(saved)}
+    provenance = cfg.get("pipeline_provenance", {})
+    if provenance.get("graph_manifest"):
+        shutil.copy2(provenance["graph_manifest"], directory / "graph_manifest.json")
+        metadata["graph_manifest_sha256"] = sha256_file(directory / "graph_manifest.json")
+        metadata["fold"] = provenance["fold"]
     processed = Path(cfg["data"]["processed_dir"])
     if (processed / "binner.pkl").exists():
         shutil.copy2(processed / "binner.pkl", directory / "binner.pkl")

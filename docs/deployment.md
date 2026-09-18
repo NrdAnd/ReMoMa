@@ -6,6 +6,8 @@ Deployment here means running the Python research pipeline as a batch job on a w
 
 Use a remote compute host for full-data training when the local workstation cannot support the graph and dataset size. No local full-data training is required to prepare or publish the repository.
 
+For a complete experiment from raw CSCO files, follow the [pipeline deployment commands](pipeline.md). That runner estimates NMI/TMFG from training dates, so no historical reference adjacency needs to be supplied. Install the optional CuPy backend only on a compatible CUDA host.
+
 Use the same environment and validated configuration as the experiment. Provision raw files or a verified processed cache, the correct graph, and a writable run directory. Install from the repository checkout because scripts and experiment configurations are repository assets; the Python wheel contains the reusable `remoma` package.
 
 ## CPU container
@@ -34,7 +36,7 @@ The Dockerfile installs a Linux CPU PyTorch wheel and runs as a non-root user by
 
 ## Move a checkpoint to another machine
 
-Copy the complete run directory and the corresponding processed cache, including the fitted binner and metadata. Retain the graph snapshot unchanged. Update only filesystem paths in `resolved_config.yaml` to their destination locations. If raw files are unavailable, set `data.allow_missing_raw: true` explicitly and retain the original raw manifests as provenance.
+Copy the complete run directory and the corresponding processed cache, including the fitted binner and metadata. Indexed caches also reference shared raw binary and per-fold volume/flow arrays: retain these dependencies and update their paths in the cache metadata after relocation. Retain the graph snapshot unchanged. Update filesystem paths in `resolved_config.yaml`, including `data.raw_files`, to their destination locations. If raw CSV files are unavailable, set `data.allow_missing_raw: true` explicitly and retain the original raw manifests as provenance. Indexed raw binary arrays remain required in that mode.
 
 ```bash
 python scripts/evaluate.py --checkpoint /absolute/run/best.pt \

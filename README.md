@@ -4,6 +4,8 @@ ReMoMa is a research framework for classifying future limit order book price mov
 
 The two model families coexist in one branch and one Python package. Selecting a model does not require switching Git branches.
 
+For reproducible experiments starting from raw CSCO files, use the [end-to-end pipeline](docs/pipeline.md). It builds NMI and TMFG from the training dates of each fixed split or walk-forward fold, then trains and evaluates either model family. Relative-lag NMI is the default; full pairwise NMI is selectable.
+
 ## Model selection
 
 | Family | `model.type` values | Configuration |
@@ -25,6 +27,15 @@ python -m unittest discover -s tests -v
 ```
 
 The test suite includes small synthetic one-epoch training checks; it does not load real market data. Use a remote compute host for the full training commands below.
+
+Inspect the complete CSCO experiment before running it:
+
+```bash
+python scripts/run_pipeline.py
+python scripts/run_pipeline.py --mode walk_forward
+```
+
+These are read-only plans. Add `--run` on the compute host to execute the full workflow; see [pipeline configuration and commands](docs/pipeline.md). The lower-level commands below accept an existing graph and do not construct one from the selected training period.
 
 Place five correctly ordered LOBSTER ten-level orderbook files in `data/raw/`. Raw market data is not distributed with the repository. See [setup](docs/setup.md) and the [data contract](docs/data.md) before preprocessing.
 
@@ -77,6 +88,7 @@ gnn/                 Compatibility entry points for previous commands
 - [Architecture and model contracts](docs/architecture.md)
 - [Data, labels, splits, and graph provenance](docs/data.md)
 - [Training, evaluation, and experiments](docs/usage.md)
+- [Complete CSCO pipeline and training-only graphs](docs/pipeline.md)
 - [Configuration reference](configs/README.md)
 - [Development and validation](docs/development.md)
 - [Branch integration and migration procedure](docs/merging.md)

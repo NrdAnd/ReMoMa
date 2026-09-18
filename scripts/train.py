@@ -39,12 +39,15 @@ from remoma.training.metrics import compute_metrics, format_report
 from remoma.training.trainer import Trainer
 
 
-def set_seed(seed: int) -> None:
+def set_seed(seed: int, deterministic: bool = False) -> None:
     random.seed(seed)
     np.random.seed(seed)
     torch.manual_seed(seed)
     if torch.cuda.is_available():
         torch.cuda.manual_seed_all(seed)
+    torch.use_deterministic_algorithms(deterministic)
+    if deterministic:
+        torch.backends.cudnn.benchmark = False
 
 
 class LOBBatch:
@@ -160,7 +163,7 @@ def main(config_path: str, overrides: dict | None = None) -> None:
     if applied:
         print(f"CLI overrides: {applied}\n")
 
-    set_seed(cfg["training"]["seed"])
+    set_seed(cfg["training"]["seed"], bool(cfg["training"].get("deterministic", False)))
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Device: {device}\n")
 
@@ -324,14 +327,21 @@ def main(config_path: str, overrides: dict | None = None) -> None:
         f"  Model: {model_name} | Split: {split} | Params: {n_params:,}",
     ]
     summary_rows: list[list] = []
+    from sklearn.metrics import confusion_matrix
+    from remoma.utils.artifacts import write_json
+    result_payload = {"model": model_name, "seed": cfg["training"]["seed"],
+                      "samples": len(test_ds), "rules": {}}
 
     if cfg["training"].get("tune_threshold", False):
         from remoma.training.threshold import apply_thresholds, decision_metrics, search_thresholds
 
         val_probs, val_labels = trainer.predict_proba(val_loader)
-        test_probs, test_labels = trainer.predict_proba(test_loader)
-        search = search_thresholds(val_probs, val_labels)
+        search = search_thresholds(val_probs, val_labels, **cfg["training"].get("threshold_search", {}))
         td, tu = search["t_down"], search["t_up"]
+        # Freeze the validation-selected rule before obtaining test predictions.
+        write_json(ckpt_dir / "calibration.json", {"thresholds": {"down": td, "up": tu},
+                                                   "validation": search})
+        test_probs, test_labels = trainer.predict_proba(test_loader)
 
         argmax_preds = test_probs.argmax(1)
         tuned_preds = apply_thresholds(test_probs, td, tu)
@@ -339,6 +349,13 @@ def main(config_path: str, overrides: dict | None = None) -> None:
         m_tuned = compute_metrics(tuned_preds, test_labels)
         signal_arg = decision_metrics(argmax_preds, test_labels)
         signal_tuned = decision_metrics(tuned_preds, test_labels)
+        result_payload["rules"] = {
+            "argmax": {"metrics": signal_arg | m_arg,
+                       "confusion_matrix": confusion_matrix(test_labels, argmax_preds, labels=[0, 1, 2]).tolist()},
+            "tuned": {"metrics": signal_tuned | m_tuned,
+                      "confusion_matrix": confusion_matrix(test_labels, tuned_preds, labels=[0, 1, 2]).tolist()},
+        }
+        result_payload["thresholds"] = {"down": td, "up": tu}
 
         lines.append(f"  F1 Macro (argmax): {m_arg['f1_macro']:.4f}   MCC (argmax): {m_arg['mcc']:.4f}")
         lines.append(f"  F1 Macro (tuned):  {m_tuned['f1_macro']:.4f}   MCC (tuned):  {m_tuned['mcc']:.4f}   "
@@ -367,6 +384,11 @@ def main(config_path: str, overrides: dict | None = None) -> None:
     else:
         preds, labels = trainer.predict(test_loader)
         metrics = compute_metrics(preds, labels)
+        from remoma.training.threshold import decision_metrics
+        result_payload["rules"]["argmax"] = {
+            "metrics": decision_metrics(preds, labels) | metrics,
+            "confusion_matrix": confusion_matrix(labels, preds, labels=[0, 1, 2]).tolist(),
+        }
         lines.append(f"  Accuracy:    {metrics['accuracy']:.4f}")
         lines.append(f"  F1 Macro:    {metrics['f1_macro']:.4f}")
         lines.append(f"  F1 Weighted: {metrics['f1_weighted']:.4f}")
@@ -381,6 +403,7 @@ def main(config_path: str, overrides: dict | None = None) -> None:
     txt_path = results_dir / f"{model_name}_{split}_{stamp}.txt"
     txt_path.write_text(report_text + "\n")
     _append_summary(results_dir / "summary.csv", summary_rows)
+    write_json(results_dir / "metrics.json", result_payload)
     print(f"\n[saved] full report → {txt_path}")
     print(f"[saved] summary → {results_dir / 'summary.csv'}")
     print(f"[saved] weights → {ckpt_dir / 'best.pt'}")

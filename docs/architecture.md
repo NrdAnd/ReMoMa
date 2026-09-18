@@ -11,9 +11,11 @@
 
 The package is organized by responsibility. Model-family changes belong in their own directories; data and evaluation logic remain shared.
 
+`pipeline.specification` validates date-based experiments and model comparability. `pipeline.runner` orchestrates training-only `graph.nmi` and `graph.construction`, shared preprocessing, per-seed training, completion manifests, and aggregated results. The runner owns the split and graph path. It removes historical model-level adjacency overrides before generating effective configurations.
+
 ## Tensor and label contract
 
-- Feature arrays: `[samples, nodes, channels]`.
+- Model feature tensors: `[samples, nodes, channels]`. Indexed storage reconstructs them from raw-row references per batch; materialized storage saves them in full.
 - Nodes: `2 * n_levels * (n_lags + 1)`, including lag zero.
 - Loader depth: exactly ten levels, with forty raw CSV columns.
 - Canonical node order: ask side, bid side; increasing level within each side; increasing lag within each level.

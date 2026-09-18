@@ -2,6 +2,8 @@
 
 Configurations are complete YAML mappings; there is no implicit inheritance. Paths in them resolve from the repository root, independently of the YAML file's location.
 
+`pipeline/cisco.yaml` is a separate orchestration specification. It explicitly loads one complete base configuration per model family and applies common data/training overrides. See the [complete pipeline guide](../docs/pipeline.md) for dates, NMI methods, cache rules, execution, and resumption.
+
 ## Available presets
 
 | Preset | Purpose |
@@ -30,6 +32,7 @@ Configurations are complete YAML mappings; there is no implicit inheritance. Pat
 | `data` | `subsample_seed` | Sampling seed independent of initialization |
 | `data` | `normalize_prices`, `extra_node_features`, `feature_dtype` | Feature representation and disk precision |
 | `data` | `use_precomputed`, `force_preprocess`, `preprocess_chunk_size` | Offline feature-cache behavior; training requires precomputed tensors |
+| `data` | `raw_files`, `raw_cache_dir`, `storage_mode` | Frozen input list, shared parsed-CSV cache, `indexed` or `materialized` windows |
 | `data` | `allow_missing_raw` | Explicit deployment exception; defaults to false |
 | `model` | `family`, `type`, `overrides` | Family validation, selected architecture, per-architecture settings |
 | GNN settings | `hidden_channels`, `num_layers`, `dropout`, `num_heads`, `add_lag_feature` | Graph architecture and positional input |
@@ -40,6 +43,7 @@ Configurations are complete YAML mappings; there is no implicit inheritance. Pat
 | `training` | `epochs`, `batch_size`, `lr`, `weight_decay` | Optimization |
 | `training` | `early_stopping_patience`, `lr_scheduler_patience`, `lr_scheduler_factor`, `grad_clip` | Stopping, learning-rate schedule, gradient clipping |
 | `training` | `use_class_weights`, `tune_threshold`, `num_workers`, `seed`, `static_graph_batching` | Loss weighting, evaluation, loading, randomness, batching |
+| `training` | `threshold_search`, `deterministic` | Validation-only threshold-grid settings; opt-in strict deterministic kernels |
 | `paths` | `checkpoints` | Parent of automatically created run directories |
 
 `model.adjacency_path` can override the recurrent adjacency. Prefer `data.adj_matrix_path` for a single explicit graph source. `data.node_feature_dim`, when supplied, must equal `2 + len(extra_node_features)`.

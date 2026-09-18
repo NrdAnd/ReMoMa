@@ -29,9 +29,10 @@ class VolumeBinner:
         Args:
             data_list: list of [N_i, 40] float32 arrays (training files only).
         """
-        all_data = np.concatenate(data_list, axis=0)
         all_vol_cols = np.concatenate([_ASK_VOL_COLS, _BID_VOL_COLS])
-        all_vols = all_data[:, all_vol_cols].astype(np.float64).ravel()
+        # Copy only volumes; do not concatenate the unused price columns.
+        all_vols = np.concatenate([data[:, all_vol_cols].astype(np.float64).ravel()
+                                   for data in data_list])
 
         # Drop NaN/inf: a single non-finite value poisons np.percentile and
         # collapses the edges to [nan], silently zeroing the whole feature.
@@ -40,7 +41,7 @@ class VolumeBinner:
             raise ValueError("No finite volume values to fit VolumeBinner.")
 
         percentiles = np.linspace(0, 100, self.n_bins + 1)
-        self._edges = np.unique(np.percentile(all_vols, percentiles))
+        self._edges = np.unique(np.percentile(all_vols, percentiles, overwrite_input=True))
         if len(self._edges) < 2:
             raise ValueError(
                 f"VolumeBinner produced {len(self._edges)} edge(s); volume data "

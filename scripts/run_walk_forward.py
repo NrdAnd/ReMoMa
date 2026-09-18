@@ -151,6 +151,8 @@ def _write_summary(rows: list[dict], root: Path) -> None:
 
 def main() -> None:
     args = parse_args()
+    print("Historical runner: the supplied graph is reused across folds. "
+          "Use scripts/run_pipeline.py --mode walk_forward for training-only NMI/TMFG per fold.")
     base_config = Path(args.base_config)
     cfg = load_config(base_config)
 

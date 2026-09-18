@@ -1,0 +1,60 @@
+# End-to-end experiment specification. All paths are repository-relative.
+version: 1
+symbol: CSCO
+raw_dir: data/raw
+output_dir: runs/experiments/cisco_by_file
+cache_dir: runs/cache
+mode: by_file
+by_file:
+  train: ['2019-01-22', '2019-01-23', '2019-01-24']
+  validation: ['2019-01-25']
+  test: ['2019-01-28']
+walk_forward:
+  min_train_files: 2
+  validation_files: 1
+  test_files: 1
+  step: 1
+  train_window: null
+  max_folds: null
+models: [cgnn, recurrent_sparse_sthnn]
+model_configs:
+  gnn: configs/gnn/default.yaml
+  recurrent: configs/recurrent/recurrent_sparse_sthnn_by_file.yaml
+seeds: [42, 43, 44]
+nmi:
+  method: relative
+  n_bins: 2000
+  backend: auto
+graph:
+  weighted: false
+data_overrides:
+  n_lags: 100
+  n_levels: 10
+  n_volume_bins: 2000
+  prediction_horizon: 50
+  price_type: mid
+  label_mode: abs
+  threshold: 100
+  normalize_prices: true
+  extra_node_features: []
+  storage_mode: indexed
+  feature_dtype: float32
+  preprocess_chunk_size: 2048
+  # No class balancing or evaluation subsampling in the final benchmark.
+  max_samples_per_class: null
+  max_val_samples: null
+  max_test_samples: null
+  subsample_seed: 42
+training_overrides:
+  epochs: 50
+  use_class_weights: true
+  tune_threshold: true
+  num_workers: 0
+  # Strict deterministic kernels are optional; CUDA graph scatter operations
+  # may not have deterministic implementations. No mixed precision is enabled.
+  deterministic: false
+  threshold_search:
+    lo: 0.33
+    hi: 0.90
+    step: 0.02
+    objective: macro_f1

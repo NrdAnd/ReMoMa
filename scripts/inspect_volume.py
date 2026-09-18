@@ -23,7 +23,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "src"))
 from remoma.config import load_config
 
 from remoma.dataset.preprocessing import build_processed_paths
-from remoma.utils.io import discover_files
+from remoma.dataset.indexed import FeatureReader
+from remoma.utils.io import configured_orderbooks, load_lobster_csv
 
 _ASK_V_COLS = np.arange(1, 40, 4)
 _BID_V_COLS = np.arange(3, 40, 4)
@@ -51,8 +52,8 @@ def main(config_path: str) -> None:
     print("\n" + "=" * 60)
     print("STAGE 2 — raw volume columns (first LOBSTER file)")
     print("=" * 60)
-    files = discover_files(data_cfg["raw_dir"])
-    raw = pd.read_csv(files[0], header=None, on_bad_lines="skip").values
+    files = configured_orderbooks(data_cfg)
+    raw = load_lobster_csv(files[0])
     vol_cols = np.concatenate([_ASK_V_COLS, _BID_V_COLS])
     vols = raw[:, vol_cols].astype(np.float64)
     print(f"  raw shape         : {raw.shape}")
@@ -65,7 +66,7 @@ def main(config_path: str) -> None:
     print("STAGE 3 — stored X_train.npy volume channel")
     print("=" * 60)
     X = np.load(paths["X_train"], mmap_mode="r")
-    sample = np.asarray(X[:200], dtype=np.float32)  # [200, N, 2]
+    sample = FeatureReader(paths["X_train"]).read(np.arange(min(200, len(X))))
     price_ch = sample[..., 0]
     vol_ch = sample[..., 1]
     print(f"  X_train shape     : {X.shape}  dtype={X.dtype}")
