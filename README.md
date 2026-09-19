@@ -6,6 +6,10 @@ The two model families coexist in one branch and one Python package. Selecting a
 
 For reproducible experiments starting from raw CSCO files, use the [end-to-end pipeline](docs/pipeline.md). It builds NMI and TMFG from the training dates of each fixed split or walk-forward fold, then trains and evaluates either model family. Relative-lag NMI is the default; full pairwise NMI is selectable.
 
+## Contributors
+
+ReMoMa was developed collaboratively by [NrdAnd](https://github.com/NrdAnd) and [SimoSaimon](https://github.com/SimoSaimon). The Git history preserves both contributors' commits and authorship.
+
 ## Model selection
 
 | Family | `model.type` values | Configuration |
