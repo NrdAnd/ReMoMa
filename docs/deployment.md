@@ -51,8 +51,8 @@ Checkpoints record architecture/feature/label settings and graph hash, not a com
 1. Verify the preserved integration ancestry and current `main` workflow in [merging](merging.md).
 2. Run the checks in [development](development.md) and wait for CI on the actual PR head.
 3. Confirm that only intended source, documentation, graph inputs, and curated reports are tracked.
-4. Select a repository license with the owners; verify rights for third-party code and redistributable artifacts. This change does not invent a license or alter upstream notices.
+4. Confirm both project authors agree to release their original work under [AGPL-3.0-only](../LICENSE). Review the [bundled third-party notices](../THIRD_PARTY_NOTICES.md), source data rights, and the redistributability of any release artifacts.
 5. Review graph/data provenance and distinguish historical measurements from results reproduced on the release commit.
 6. Merge the reviewed release changes into `main`, then tag that exact commit according to the owners' versioning policy.
 
-Repository visibility, branch protection, tags, and releases are GitHub administration actions. The pipeline never changes them and never uploads private datasets. A public GitHub repository is not automatically open source: until the owners add a license, default copyright restrictions apply.
+Repository visibility, branch protection, tags, and releases are GitHub administration actions. The pipeline never changes them and never uploads private datasets. The project license does not grant rights to raw market data or supersede third-party asset licenses. AGPL-3.0-only permits commercial and private internal use; its source-sharing obligations apply under the conditions stated in the license, including distribution and remote network interaction with a modified version.

@@ -6,4 +6,4 @@ The reusable implementation is [remoma.graph.tmfg](../../src/remoma/graph/tmfg.p
 
 Run the bootstrap cell first, then select the intended training-only similarity matrix. The historical notebook's lag-zero filtering rule is an experimental choice, not a requirement of every model. Edge count alone does not prove planarity, and clustering/path length alone do not establish a small-world result.
 
-`lib/` contains the existing third-party visualization assets. Their upstream notices are retained. See the [notebook guidance](../README.md).
+`lib/` contains the existing third-party visualization assets. Their upstream notices and license texts are retained; see the [third-party notices](../../THIRD_PARTY_NOTICES.md). See the [notebook guidance](../README.md).

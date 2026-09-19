@@ -103,4 +103,14 @@ gnn/                 Compatibility entry points for previous commands
 
 This integration includes synthetic CPU validation. It does not reproduce the historical full-data experiments or establish a live trading service. Historical results used earlier preprocessing and, in some cases, different test subsamples. The reference graphs lack a complete training-only provenance record; rebuild them from the training period before making leakage-free generalization claims. See the [validation record](docs/validation.md).
 
-No repository-wide license has been selected. The owners must choose an appropriate license before presenting this work as open source; existing third-party license notices remain in place.
+## License
+
+Original ReMoMa code and documentation are licensed under the
+[GNU Affero General Public License v3.0 only](LICENSE) (`AGPL-3.0-only`).
+Copyright 2026 Andrea Nardi and Simone Somazzi. The license permits commercial
+use, but covered versions distributed to others or modified versions offered
+through a network must make the corresponding source available under its terms.
+Private internal use does not require publication of modifications. Bundled
+third-party visualization assets retain their own licenses; see the
+[third-party notices](THIRD_PARTY_NOTICES.md). Raw LOBSTER data is not included
+or licensed by this repository.
