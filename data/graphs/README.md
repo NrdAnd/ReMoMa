@@ -1,6 +1,6 @@
 # Reference adjacency matrices
 
-These historical inputs let both model families construct their expected graph structures. They are research references, not proof of training-only graph estimation. The [manifest](manifest.json) records file hashes, dimensions, edge counts, and known provenance.
+These reference matrices are used by the standalone configurations in `configs/gnn/` and `configs/recurrent/`. The [complete pipeline](../../docs/pipeline.md) builds its own graphs from each split's training dates and does not use these matrices. The [manifest](manifest.json) records their hashes, dimensions, edge counts, and known provenance.
 
 | File | Nodes | Directed nonzero entries | Meaning |
 | --- | ---: | ---: | --- |
@@ -12,4 +12,4 @@ These historical inputs let both model families construct their expected graph s
 
 The weighted configuration referenced a file absent from the source branch. It was reconstructed with `build_recurrent_tmfg_adjacency.py --max-lag 100 --weighted` from the existing local mean NMI matrix. Its nonzero topology exactly matches the versioned unweighted lag-100 reference. The source matrix hash is in the manifest; its source dates were not recorded, so the reconstruction does not establish training-only provenance.
 
-To build a new evaluation graph, supply a similarity matrix estimated from the training period and record its dates and hash. Do not replace a graph used by an existing checkpoint: retain that run's graph snapshot.
+For new experiments, use the complete pipeline or supply a similarity matrix estimated from a documented training period. The source dates of these reference inputs are not fully recorded; training-only estimation cannot be verified from them. Retain an existing checkpoint's graph snapshot when evaluating that run.

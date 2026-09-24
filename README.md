@@ -73,9 +73,9 @@ Start with [setup](docs/setup.md) and the [complete pipeline](docs/pipeline.md).
 
 The [documentation index](docs/README.md) also covers individual commands, development, deployment, integration history, and historical reports.
 
-## Research status
+## Experimental results
 
-Synthetic CPU tests cover implementation correctness. Historical full-data results have not been reproduced with the current pipeline, and the reference graphs lack complete training-date provenance. Rebuild graphs from training data for held-out evaluation. See [validation](docs/validation.md) and [historical results and limitations](docs/reports/README.md).
+Results from earlier experiments are preserved in the [GNN report](docs/reports/gnn_experiments.md) and [recurrent model report](docs/reports/recurrent_experiments.html). The [experiment archive](docs/reports/README.md) describes their evaluation protocols and scope. Software checks are documented in the [validation record](docs/validation.md).
 
 ## License
 

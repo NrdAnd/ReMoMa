@@ -1,26 +1,25 @@
 # Historical experiment reports
 
-These files preserve research records from before the unified pipeline. They have not been reproduced with the current pipeline.
+This archive contains the results, configurations, and analysis of experiments performed before the unified pipeline. The recorded metrics belong to those experiments; full-data runs with the current pipeline are still pending.
 
 | Record | Description |
 | --- | --- |
-| [GNN experiments](gnn_experiments.md) | English presentation of the tracked classification results |
+| [GNN experiments](gnn_experiments.md) | Recorded classification results |
 | [Research history](research_history.md) | Development sequence and earlier observations |
-| [Research status](research_status.md) | Open questions and methodological corrections |
-| [Recurrent experiments](recurrent_experiments.html) | Existing extended recurrent report, retained in English |
-| [Implementation slides](implemented_solution.pptx) | Historical English presentation |
+| [Research status](research_status.md) | Open questions and planned comparisons |
+| [Recurrent experiments](recurrent_experiments.html) | Extended recurrent experiment report |
+| [Implementation slides](implemented_solution.pptx) | Presentation of the original experiments |
 | [Raw result summaries](results/summary.csv) | Original numerical GNN records |
 
-The raw text/CSV result files are preserved without recomputing metrics. Slides and the recurrent HTML document reflect their original experiments and may contain earlier interpretations. Current scientific qualifications below take precedence over historical claims.
+The original text/CSV metrics, slides, and recurrent HTML report are retained unchanged. Read their conclusions in the context of the protocols below.
 
-## Interpretation limits
+## Evaluation protocols and scope
 
 - Most GNN comparisons use one held-out day from a five-day CSCO dataset.
 - July and September runs used different 50,000-sample subsets of that day.
-- Initialization-seed variability is not a confidence interval for variation across trading days.
-- The supplied graph inputs do not carry sufficient source-date provenance to certify training-only estimation.
-- Schema version 3 includes the corrected temporal purging and training-only binner ranges introduced in version 2, and adds indexed/materialized storage identities. Old results are not a reproduction of the current pipeline.
-- Comparing values from different datasets, dates, label definitions, threshold policies, or parameter budgets does not establish state-of-the-art superiority.
-- Directional classification metrics are not profit, execution quality, or a backtest with trading costs.
+- Seed variability describes repeated initialization on the same data, not variation across trading days.
+- The source dates used to estimate the reference graphs are not fully recorded, so training-only estimation cannot be verified for those graphs. This does not establish that test data was used.
+- Current preprocessing uses purged temporal splits, training-only volume bins, and indexed/materialized cache identities. These changes require new runs to measure current-pipeline performance.
+- Model comparisons require matched data, dates, labels, decision rules, and parameter budgets. The reported classification metrics do not measure trading returns or costs.
 
 Use a declared, matched protocol for new comparisons. Earlier working notes remain available in Git history.
