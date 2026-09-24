@@ -16,9 +16,7 @@ The integration incorporated these source tips:
 | Shared ancestor | `5b038af` | Original common pipeline |
 | Integration merge | `fc1a36a` | Two-parent merge containing both histories |
 
-Before integration, the local `main` pointed to `5b038af`, nine commits behind the fetched GNN tip. Integration started from `10283d4`; neither source line was rewritten. The earlier `optimize-preprocessing` work was already part of the shared history. Subsequent organization, documentation, and end-to-end pipeline commits are descendants of `fc1a36a` on the current `main`.
-
-The merge produced textual conflicts in `gnn/scripts/train.py` and `gnn/src/models/__init__.py`. They were resolved explicitly before structural migration. No blanket “ours” or “theirs” strategy was used.
+Integration started from `10283d4` and preserved both source histories. Subsequent package reorganization and pipeline changes descend from `fc1a36a`.
 
 ## Resolution decisions
 
@@ -53,7 +51,7 @@ A clean textual merge alone was insufficient: the old GNN checkpoint-directory s
 | GNN reports, slides, historical results | `docs/reports/` |
 | Root heatmaps | One regenerated English figure in `docs/assets/`; originals retained in Git history |
 
-Tracked bytecode, generated preprocessing/checkpoint fragments, temporary PDF renderings, and the generated similarity cache are excluded from the final source tree. Historical versions remain available through Git. Existing untracked local data and working files are not staged for publication.
+Generated caches, checkpoints, and raw data are excluded from version control. Earlier source layouts remain available in Git history.
 
 Compatibility wrappers forward to the root implementation and translate old `config/<name>.yaml` arguments. New code must import `remoma`, not the former generic `src` namespace. Old external Python imports and arbitrary old relative data/output paths are not compatibility guarantees.
 
@@ -68,13 +66,11 @@ git merge-base --is-ancestor 10283d4 HEAD
 git merge-base --is-ancestor 4ba8335 HEAD
 git show --no-patch --pretty=raw fc1a36a
 git diff --check
-python -m unittest discover -s tests -v
-python scripts/check_repository.py
 ```
 
 Each ancestry command must return exit status zero. `git show` must list `10283d4` and `4ba8335` as the two parents of `fc1a36a`. These checks use immutable commit identities and therefore remain valid even after the temporary remote branch names have been removed.
 
-For the recorded source tips, the current `main` is already an integrated descendant. This statement applies to those exact commits and does not make claims about later work in another repository.
+These checks cover the recorded source tips. For code changes, also run the [development checks](development.md).
 
 ## Current branch workflow
 

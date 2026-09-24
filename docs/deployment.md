@@ -4,7 +4,7 @@
 
 Deployment here means running the Python research pipeline as a batch job on a workstation or compute host. There is no HTTP inference API, streaming market-data client, broker integration, online hidden-state service, or automated trading execution component.
 
-Use a remote compute host for full-data training when the local workstation cannot support the graph and dataset size. No local full-data training is required to prepare or publish the repository.
+Choose a compute host with sufficient memory and storage for the selected graph and dataset.
 
 For a complete experiment from raw CSCO files, follow the [pipeline deployment commands](pipeline.md). That runner estimates NMI/TMFG from training dates, so no historical reference adjacency needs to be supplied. Install the optional CuPy backend only on a compatible CUDA host.
 

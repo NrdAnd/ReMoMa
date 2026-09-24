@@ -1,68 +1,49 @@
 # ReMoMa
 
-ReMoMa is a research framework for classifying future limit order book price movements as **down (0), flat (1), or up (2)**. It provides graph neural networks and a recurrent sparse spatio-temporal model through a shared preprocessing, training, and evaluation pipeline.
+ReMoMa is a research framework for classifying future limit order book price movements as **down (0), flat (1), or up (2)**. Graph neural networks and a recurrent sparse spatio-temporal model share preprocessing, training, and evaluation in one Python package.
 
-The two model families coexist in one branch and one Python package. Selecting a model does not require switching Git branches.
-
-For reproducible experiments starting from raw CSCO files, use the [end-to-end pipeline](docs/pipeline.md). It builds NMI and TMFG from the training dates of each fixed split or walk-forward fold, then trains and evaluates either model family. Relative-lag NMI is the default; full pairwise NMI is selectable.
+The [complete CSCO pipeline](docs/pipeline.md) builds normalized mutual information (NMI) matrices and Triangulated Maximally Filtered Graphs (TMFGs) from each split's training dates, then trains and evaluates the selected models. Relative-lag NMI is the default; full pairwise NMI is also available.
 
 ## Contributors
 
-ReMoMa was developed collaboratively by [NrdAnd](https://github.com/NrdAnd) and [SimoSaimon](https://github.com/SimoSaimon). The Git history preserves both contributors' commits and authorship.
+Developed collaboratively by [NrdAnd](https://github.com/NrdAnd) and [SimoSaimon](https://github.com/SimoSaimon). Both contributors' commits and authorship are preserved in Git history.
 
-## Model selection
+## Models
 
 | Family | `model.type` values | Configuration |
 | --- | --- | --- |
 | GNN | `gcn`, `gat`, `sage`, `cgnn`, `cgnn_sage`, `cgnn_gat`, `stgcn`, `stgcn_sage`, `stgcn_gat` | [GNN default](configs/gnn/default.yaml) |
 | Recurrent | `recurrent_sparse_sthnn` | [Recurrent by-file](configs/recurrent/recurrent_sparse_sthnn_by_file.yaml) |
 
-The recurrent model uses a GRU cell and shared message transformations on feature/lag graph nodes. It is also graph-based; “GNN” and “recurrent” distinguish the two implementation families in this repository.
+The recurrent model applies shared graph messages and GRU updates to feature/lag nodes. Both families are graph-based and available on `main`; model selection requires no branch change. The complete pipeline supplies matched experiment settings; the individual presets use different lag depths.
 
 ## Quick start
 
-Use Python 3.10 or 3.11. Run commands from the repository root.
+Use Python 3.10 or 3.11 and run commands from the repository root. See [setup](docs/setup.md) for CPU/CUDA installation.
 
 ```bash
 python -m venv .venv
 source .venv/bin/activate
 python -m pip install -e '.[dev]'
-python -m unittest discover -s tests -v
+python scripts/check_repository.py
 ```
 
-The test suite includes small synthetic one-epoch training checks; it does not load real market data. Use a remote compute host for the full training commands below.
-
-Inspect the complete CSCO experiment before running it:
+Place the five original CSCO ten-level orderbook files listed in the [pipeline guide](docs/pipeline.md#installation-and-input-files) in `data/raw/`. Raw market data is not included. Once the files are present, inspect the fixed or walk-forward plan:
 
 ```bash
 python scripts/run_pipeline.py
 python scripts/run_pipeline.py --mode walk_forward
 ```
 
-These are read-only plans. Add `--run` on the compute host to execute the full workflow; see [pipeline configuration and commands](docs/pipeline.md). The lower-level commands below accept an existing graph and do not construct one from the selected training period.
-
-Place five correctly ordered LOBSTER ten-level orderbook files in `data/raw/`. Raw market data is not distributed with the repository. See [setup](docs/setup.md) and the [data contract](docs/data.md) before preprocessing.
+These commands inspect filenames and settings without reading raw contents or training. Run the complete fixed-split experiment on a compute host with:
 
 ```bash
-# GNN example: temporal CNN followed by graph convolutions.
-python scripts/preprocess_dataset.py --config configs/gnn/default.yaml
-python scripts/train.py --config configs/gnn/default.yaml --model cgnn \
-  --checkpoint-dir runs/cgnn_example
-
-# Recurrent example: separate graph, feature cache, and run directory.
-python scripts/preprocess_dataset.py \
-  --config configs/recurrent/recurrent_sparse_sthnn_by_file.yaml
-python scripts/train.py \
-  --config configs/recurrent/recurrent_sparse_sthnn_by_file.yaml \
-  --checkpoint-dir runs/recurrent_example
-
-# Reload the saved effective configuration automatically.
-python scripts/evaluate.py --checkpoint runs/cgnn_example/best.pt
-python scripts/evaluate.py --checkpoint runs/recurrent_example/best.pt \
-  --thresholds runs/recurrent_example/thresholds.json
+python scripts/run_pipeline.py --run
 ```
 
-Without `--checkpoint-dir`, training creates a unique directory under the configured checkpoint root. An explicit directory is used exactly as supplied and must not already contain a run.
+The default NMI backend is `auto`; use `--nmi-backend cpu` or `cuda` to select it explicitly. GPU NMI requires the optional CuPy installation described in the [pipeline guide](docs/pipeline.md). Model training selects CUDA independently through PyTorch.
+
+For individual preprocessing, model selection, training, and checkpoint evaluation commands, see [usage](docs/usage.md). Those commands accept a supplied graph; the complete pipeline constructs training-only graphs automatically.
 
 ## Repository structure
 
@@ -72,12 +53,13 @@ src/remoma/           Shared Python package
   graph/             NMI estimation, graph validation, and TMFG construction
   models/gnn/        Nine graph-convolution architectures
   models/recurrent/  Recurrent sparse STHNN implementation
+  pipeline/          Fixed-split and walk-forward experiment orchestration
   training/          Trainer, metrics, decision thresholds
-  utils/             Input caches, artifact identities/locks, checkpoint provenance
+  utils/             Caches, artifact locks, checkpoint provenance
 scripts/             Training, evaluation, experiments, and analysis commands
 configs/             GNN, recurrent, and complete-pipeline configurations
-data/graphs/         Versioned reference adjacency matrices
-docs/                Setup, architecture, usage, development, and deployment
+data/graphs/         Historical reference adjacency matrices
+docs/                User guides, technical reference, and research reports
 notebooks/           Exploratory LOB, GLASSO, and TMFG notebooks
 tests/               Synthetic integration and regression tests
 deploy/              CPU batch-execution container
@@ -87,30 +69,16 @@ gnn/                 Compatibility entry points for previous commands
 
 ## Documentation
 
-- [Documentation index](docs/README.md)
-- [Installation and environment](docs/setup.md)
-- [Architecture and model contracts](docs/architecture.md)
-- [Data, labels, splits, and graph provenance](docs/data.md)
-- [Training, evaluation, and experiments](docs/usage.md)
-- [Complete CSCO pipeline and training-only graphs](docs/pipeline.md)
-- [Configuration reference](configs/README.md)
-- [Development and validation](docs/development.md)
-- [Integration history and current branch workflow](docs/merging.md)
-- [Deployment and GitHub publication](docs/deployment.md)
-- [Historical experiments and limitations](docs/reports/README.md)
+Start with [setup](docs/setup.md) and the [complete pipeline](docs/pipeline.md). Use the [architecture](docs/architecture.md), [data contract](docs/data.md), and [configuration reference](configs/README.md) for technical details.
+
+The [documentation index](docs/README.md) also covers individual commands, development, deployment, integration history, and historical reports.
 
 ## Research status
 
-This integration includes synthetic CPU validation. It does not reproduce the historical full-data experiments or establish a live trading service. Historical results used earlier preprocessing and, in some cases, different test subsamples. The reference graphs lack a complete training-only provenance record; rebuild them from the training period before making leakage-free generalization claims. See the [validation record](docs/validation.md).
+Synthetic CPU tests cover implementation correctness. Historical full-data results have not been reproduced with the current pipeline, and the reference graphs lack complete training-date provenance. Rebuild graphs from training data for held-out evaluation. See [validation](docs/validation.md) and [historical results and limitations](docs/reports/README.md).
 
 ## License
 
-Original ReMoMa code and documentation are licensed under the
-[GNU Affero General Public License v3.0 only](LICENSE) (`AGPL-3.0-only`).
-Copyright 2026 Andrea Nardi and Simone Somazzi. The license permits commercial
-use, but covered versions distributed to others or modified versions offered
-through a network must make the corresponding source available under its terms.
-Private internal use does not require publication of modifications. Bundled
-third-party visualization assets retain their own licenses; see the
-[third-party notices](THIRD_PARTY_NOTICES.md). Raw LOBSTER data is not included
-or licensed by this repository.
+Original code and documentation: [GNU Affero General Public License v3.0 only](LICENSE) (`AGPL-3.0-only`). Copyright 2026 Andrea Nardi and Simone Somazzi.
+
+Bundled visualization assets retain their own licenses; see [third-party notices](THIRD_PARTY_NOTICES.md). Raw LOBSTER data is not included or licensed by this repository.

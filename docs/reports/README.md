@@ -1,6 +1,6 @@
 # Historical experiment reports
 
-These files preserve research records from before the unified pipeline. They are not fresh measurements of the integration commit.
+These files preserve research records from before the unified pipeline. They have not been reproduced with the current pipeline.
 
 | Record | Description |
 | --- | --- |
@@ -23,4 +23,4 @@ The raw text/CSV result files are preserved without recomputing metrics. Slides 
 - Comparing values from different datasets, dates, label definitions, threshold policies, or parameter budgets does not establish state-of-the-art superiority.
 - Directional classification metrics are not profit, execution quality, or a backtest with trading costs.
 
-Recompute on a declared protocol before using these figures in a publication claim. Superseded Italian working notes remain accessible in Git history; the English documents consolidate them and correct unsupported inferences.
+Use a declared, matched protocol for new comparisons. Earlier working notes remain available in Git history.

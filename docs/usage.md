@@ -25,7 +25,7 @@ python scripts/preprocess_dataset.py --config configs/gnn/default.yaml
 python scripts/preprocess_dataset.py --config configs/gnn/default.yaml --force --chunk-size 512
 ```
 
-Training also preprocesses automatically when the cache is missing or incompatible. Parsed orderbooks are stored once as shared read-only arrays; the first parse temporarily holds one CSV file in memory. Materialized features are written in chunks to memory-mapped arrays, while indexed storage saves row references and reconstructs only the current batch. Reduce chunk size to lower temporary feature memory in materialized mode.
+Training also preprocesses automatically when the cache is missing or incompatible. With indexed storage or an explicit `data.raw_cache_dir`, parsed orderbooks are cached as read-only arrays; the first parse temporarily holds one CSV file in memory. Materialized storage without a raw cache loads all selected orderbooks into memory. Materialized features are written in chunks to memory-mapped arrays, while indexed storage saves row references and reconstructs only the current batch. Reduce chunk size to lower temporary feature memory in materialized mode.
 
 ## Train and retain a run
 
@@ -70,7 +70,7 @@ python scripts/tune_threshold.py --checkpoint runs/cgnn_seed42/best.pt \
 
 Evaluation uses the saved configuration when `--config` is omitted. An old checkpoint without a saved configuration requires `--config`. New checkpoints validate model/feature settings and graph content before loading.
 
-Argmax chooses the largest class probability. Threshold evaluation predicts down/up only when that probability exceeds its threshold; otherwise it predicts flat. If both directional probabilities qualify, the larger one wins, with up selected on an exact tie. Threshold fitting uses validation labels and is performed without changing model weights. Once a test set informs later model selection, it is no longer an untouched final test set.
+Argmax chooses the largest class probability. Threshold evaluation predicts down/up only when that probability meets or exceeds its threshold (`>=`); otherwise it predicts flat. If both directional probabilities qualify, the larger one wins, with up selected on an exact tie. Threshold fitting uses validation labels and is performed without changing model weights. Once a test set informs later model selection, it is no longer an untouched final test set.
 
 Reported metrics include accuracy, macro/weighted/per-class F1, MCC in training reports, confusion matrices, directional precision/recall, flat-to-directional rate, and opposite-direction rate. Macro F1 always includes all three classes, even when a small split lacks a class.
 
@@ -115,6 +115,8 @@ Generated configurations and summaries live under `runs/generated_configs/`. The
 `run_stable_thresholds.py` and `run_walk_forward_ensemble.py` retain historical experiments that aggregate thresholds across selected folds. Applying a threshold estimated from later folds to earlier tests is a **retrospective diagnostic**, not a prospective backtest. Use a separate earlier calibration period and a later untouched test period for a deployable threshold policy. These scripts do not automatically enforce that cross-fold temporal restriction.
 
 ## Graph construction and analysis
+
+The plotting command requires the optional research dependencies: `python -m pip install -e '.[research]'`. The input matrices below are examples to supply, not bundled files.
 
 ```bash
 python scripts/build_recurrent_tmfg_adjacency.py \

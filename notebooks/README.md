@@ -8,4 +8,4 @@ These exploratory notebooks are separate from the supported model pipeline. They
 
 Review every parameter cell before execution. Outputs and execution counts are cleared to keep commits reviewable and avoid embedding local data or stale findings. Save new figures and HTML under `runs/` and promote only reviewed results into `docs/reports/`.
 
-The integration validates notebook structure and source syntax where applicable; it does not rerun GPU analyses or certify historical conclusions.
+`scripts/check_repository.py` checks notebook structure, cleared outputs, and Python syntax outside shell/IPython cells. It does not execute notebook analyses.

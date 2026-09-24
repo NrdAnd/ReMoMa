@@ -1,5 +1,7 @@
 # Documentation
 
+Start with **Setup → Complete pipeline** to run an experiment. Use the remaining guides as references for specific tasks.
+
 | Document | Purpose |
 | --- | --- |
 | [Setup](setup.md) | Python environment, CPU/CUDA installation, data placement |
@@ -13,4 +15,4 @@
 | [Validation](validation.md) | Checks performed and remaining verification limits |
 | [Reports](reports/README.md) | Historical measurements and interpretation limits |
 
-All maintained documentation, comments, command help, and notebook source text are in English. Historical Git commits retain their original content.
+For available YAML presets and setting names, see the [configuration reference](../configs/README.md).

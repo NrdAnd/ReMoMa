@@ -31,7 +31,7 @@ CSCO_2019-01-25_34200000_57600000_orderbook_10.csv
 CSCO_2019-01-28_34200000_57600000_orderbook_10.csv
 ```
 
-There must be exactly one selected-ticker orderbook per date. Names and session bounds are validated. Other tickers are excluded. The default price/volume features and price-movement labels use orderbook files. Precisely paired `*_message_10.csv` files are required only when order-flow features are enabled; preprocessing also verifies row alignment. No sample window or prediction horizon crosses a daily file boundary.
+There must be exactly one selected-ticker orderbook per date. Names and session bounds are validated. Other tickers are excluded. The default price/volume features and price-movement labels use orderbook files. Precisely paired `*_message_10.csv` files are required only when order-flow features are enabled; preprocessing checks equal row counts. These checks cannot establish event alignment after source files have been modified; retain the original paired exports. No sample window or prediction horizon crosses a daily file boundary.
 
 ## Inspect the plan without executing
 
@@ -40,7 +40,7 @@ python scripts/run_pipeline.py
 python scripts/run_pipeline.py --mode walk_forward
 ```
 
-Without `--run`, the command prints dates, models, seeds, and NMI settings. It does not read the contents of raw data, create an experiment, compute NMI, or train models.
+The selected raw files must already exist, even for plan inspection. Without `--run`, the command prints dates, models, seeds, and NMI settings. It does not read the contents of raw data, create an experiment, compute NMI, or train models.
 
 The supplied specification compares CGNN and recurrent sparse STHNN at the same lag depth of 100, horizon of 50 events, absolute price threshold of 100 raw LOBSTER units, and seeds 42/43/44. It uses all valid train/validation/test samples, class-weighted cross entropy, float32 features, and each family's architecture and batch-size settings from its base configuration. These are explicit benchmark settings, not a claim that the hyperparameters are optimal. There is no implicit hyperparameter search.
 
@@ -161,7 +161,7 @@ Repeat the **same command and settings**, adding `--resume`, to reuse a complete
 python scripts/run_pipeline.py --nmi-backend cuda --run --resume
 ```
 
-Inputs, settings, numerical environment, and source code must match the frozen experiment. Changing them requires a new `output_dir`; compatible shared caches remain reusable. An interrupted model is not marked complete. Add `--restart-incomplete` with `--resume` to archive that attempt and restart only that model from its seed. Optimizer/epoch-level training resumption is not implemented. Archived attempts are retained until the owner explicitly removes them.
+Inputs, settings, numerical environment, and source code must match the frozen experiment. Changing them requires a new `output_dir`; compatible shared caches remain reusable. An interrupted model is not marked complete. Add `--restart-incomplete` with `--resume` to archive that attempt and restart only that model from its seed. Optimizer/epoch-level training resumption is not implemented. Archived attempts are retained for inspection and can be removed manually.
 
 Do not modify inputs/code during a run. After a forced process termination, inspect the PID/host in any remaining lock and verify the writer is gone before removing that specific lock. Never remove another active job's lock. Cache directories contain references needed by indexed evaluation; keep them with the experiment or regenerate preprocessing from the recorded inputs. The runner does not automatically delete shared caches or checkpoints.
 

@@ -1,66 +1,43 @@
-# Integration validation record
+# Validation record
 
-## Documentation consistency audit — 2026-09-18
+This record separates synthetic correctness checks from full-data research results. The dated results below describe checks performed at those revisions; they do not certify subsequent changes automatically.
 
-All 28 tracked Markdown documents, including the pull-request template, were checked for local links, closed code fences, current paths, configuration names, CLI commands, preprocessing schema, generated artifacts, model selection, pipeline behavior, and branch-history instructions. The repository checker was expanded to include hidden tracked documentation while excluding local build/test caches. All 31 current and compatibility command help entry points passed, and the historical GNN table matched all 32 rows in its source CSV. Documentation now describes the main-only remote layout while preserving the two-parent integration proof by immutable commit ID. A tracked-file inventory found no raw-data paths or common credential filenames; this is a targeted publication check, not a substitute for GitHub secret scanning. This audit ran no model training and did not process raw CSCO contents.
+## Documentation checks — 2026-09-24
 
-## End-to-end pipeline validation — 2026-09-18
+All 29 tracked Markdown files passed local-link and heading-anchor checks. All 31 CLI help entry points passed; fixed and walk-forward plans matched the documented settings using filename-only fixtures. The 32 GNN result rows matched the source CSV, and all five graph hashes matched the manifest. Threshold equality/tie rules and order-flow signs matched the implementation. Repository checks passed. No model training or raw-data processing was performed.
 
-The expanded suite completed in 189.286 seconds: **22 tests discovered, 21 passed, one CUDA-only test explicitly skipped**. The local platform and numerical environment are the CPU environment recorded below. No training or NMI estimation was performed on the real CSCO files.
+## CPU validation — 2026-09-18
 
-Additional checks covered:
+**22 tests discovered: 21 passed, one CUDA-only test skipped.** The suite completed in 189.286 seconds on macOS arm64, Python 3.10.20, CPU.
 
-- Full pairwise NMI against scikit-learn's arithmetic-normalized reference, relative-lag representatives against the corresponding full pairs, signed-lag reconstruction, constant/binary columns, and sparse joint counting.
-- TMFG termination and topology for zero-gain and tied similarity matrices.
-- Graph estimation from training files only, training-source mutation detection, and reuse unaffected by changes to held-out files.
-- Exact equality between indexed and materialized features, including order-flow channels, and indexed-cache corruption detection.
-- Optimized threshold counts and selected objective values against brute-force evaluation, including float32 boundary comparisons and ties.
-- Expanding and rolling date plans, nonoverlapping test periods, and rejection of incompatible model comparison settings.
-- A complete two-fold experiment with GCN, GAT, and recurrent sparse STHNN, one epoch per model/fold, and a spawned data-loader worker; saved GAT evaluation; completed-run reuse without launching training again; changed-setting rejection; and a separate full-NMI graph-only stage.
-- Aggregation across folds within each seed, without counting repeated seeds as additional test observations.
+Runtime: PyTorch 2.2.0, PyG 2.7.0, NumPy 1.26.4, pandas 2.3.3, scikit-learn 1.7.2, PyYAML 6.0.3, tqdm 4.67.3.
 
-The synthetic end-to-end fixtures use five files of 140 rows, lag depth two, and small hidden widths. CLI plan inspection on the local CSCO filenames performs no raw-content processing. CUDA numerical parity and full-data performance remain untested locally; the [pipeline guide](pipeline.md#verification-boundaries) provides an explicit, small opt-in CUDA parity check for the compute host.
+| Area | Checks |
+| --- | --- |
+| Models | Forward/backward for all nine GNNs and recurrent sparse STHNN; supported static/PyG equivalence; extra feature channels |
+| Data | Chronological disjoint splits, purged temporal windows, training-only volume bins, independent sampling seeds, exact message-file pairing |
+| Graphs | Label ordering, symmetry and finite weights, cache invalidation, training-only source hashes, weighted/unweighted reference topology |
+| NMI/TMFG | Full NMI against scikit-learn; relative-lag representatives against full pairs; constant/binary columns; tied and zero-gain TMFG inputs |
+| Storage | Indexed/materialized feature equality, including order flow; content-mutation and cache-corruption detection |
+| Decisions | Threshold search against brute force, float32 boundaries and ties, zero-threshold labels, metrics with absent classes |
+| Checkpoints | Train/save/reload/evaluate, threshold reload, rejection of incompatible settings or graph/binner contents |
+| Orchestration | Two-fold GCN/GAT/recurrent experiment, spawned loader worker, expanding/rolling plans, completed-run reuse, changed-setting rejection, graph-only full-NMI stage |
+| Aggregation | Pooled fold metrics per seed; seed repetitions excluded from test sample counts |
 
-Final source compilation, configured Ruff checks, and whitespace checks passed. The repository checker validated 70 Python files, six notebooks, ten configurations, and 26 Markdown documents. Both wheel and source-distribution builds passed. The default walk-forward plan resolved the intended five CSCO dates without processing their contents.
+End-to-end fixtures used five synthetic files of 140 rows, lag depth two, small hidden widths, and one epoch per model/fold. The earlier eleven-test suite also passed on 2026-09-17, including legacy walk-forward, stable-threshold, ensemble, and grid-generation workflows.
 
-The following sections retain the earlier integration validation record and its historical scope.
+## Repository checks — 2026-09-18
 
-## Earlier integration validation — 2026-09-17
+Source compilation, configured Ruff checks, notebook cleanliness/syntax checks, YAML reference paths, Markdown links/fences, and whitespace checks passed. All 31 current and compatibility CLI help entry points passed. Wheel and source-distribution builds passed.
 
-Platform: macOS arm64, Python 3.10.20, CPU. Runtime: PyTorch 2.2.0, PyG 2.7.0, NumPy 1.26.4, pandas 2.3.3, scikit-learn 1.7.2, PyYAML 6.0.3, tqdm 4.67.3.
+The documentation audit checked all 28 Markdown files then tracked, including the pull-request template. The GNN results table matched all 32 source CSV rows. All five reference graphs passed structural checks; hashes and counts are recorded in the [manifest](../data/graphs/manifest.json). The two-parent integration is documented in [merging](merging.md).
 
-## Completed correctness checks
+## Verification limits
 
-The eleven-test synthetic suite passed. It covered:
+- No full-data CSCO training, NMI computation, or historical performance reproduction was performed in these checks.
+- CUDA execution and throughput were not tested. The [opt-in NMI parity test](pipeline.md#verification-boundaries) must run on a CUDA host.
+- The Docker recipe, Linux/Python 3.11 CI, and remote deployment were not verified by these macOS runs.
+- GPU notebooks were checked structurally but not executed. Historical graph-estimation dates and source-data alignment remain unverified.
+- Historical prototypes are outside the supported runtime; their known defects are documented in [archive](../archive/README.md).
 
-- Forward and backward computation for all nine GNN architectures and recurrent sparse STHNN, including extra feature channels.
-- Static/PyG output equivalence for supported architectures.
-- Graph-label reordering, graph-content cache invalidation, and invalid graph rejection.
-- Disjoint file splits and nonoverlapping temporal input/target windows.
-- Training-only volume-bin fitting.
-- Independent sampling/initialization seeds and raw-content cache invalidation.
-- Exact orderbook/message filename pairing.
-- Zero-threshold labels and metrics with absent classes.
-- Checkpoint rejection when model settings or graph content change.
-- A single small walk-forward fold, stable-threshold evaluation, a two-member seed ensemble, and hyperparameter-grid configuration generation.
-- A complete synthetic train/save/reload/evaluate cycle for GCN, GAT, and recurrent models, with threshold reload and a spawned GAT data-loader worker.
-
-The complete-cycle tests used five synthetic files of 140 rows each, lag depth 2, small hidden widths, and one epoch. They completed as part of a roughly 62-second suite. **No training was run against the real local LOBSTER files.** Full-data training remains reserved for remote compute.
-
-An initial OpenMP shared-memory failure was caused by restricted process permissions. Repeating the same synthetic suite with normal process permissions passed; this was an environment restriction, not a failed model assertion.
-
-## Reference inputs and repository checks
-
-All five distributed graph matrices were loaded and checked for matching unique labels, dimensions, finite nonnegative weights, and symmetry. The reconstructed weighted graph's nonzero topology matches the existing unweighted lag-100 reference. Exact hashes and counts are in the [graph manifest](../data/graphs/manifest.json).
-
-Source compilation, undefined-name lint checks, notebook cleanliness/syntax checks, YAML reference-path checks, and Markdown link/fence checks passed. All 30 current/compatibility CLI help entry points passed. Both wheel and source-distribution builds passed locally. The source tips and recorded merge parents are documented in [merging](merging.md).
-
-## Limits
-
-- Full-data training, predictive performance reproduction, CUDA execution, and remote deployment were not performed.
-- GPU research notebooks were not executed. Notebook outputs were cleared and source text reviewed; dataset-specific paths still require configuration.
-- The Docker recipe and Linux/Python 3.11 CI are provided but require execution on their respective environments. Local macOS results do not certify those platforms.
-- Raw data and historical graph-estimation dates were not independently reconstructed or certified.
-- Historical prototypes are outside the supported runtime and retain documented defects for research history.
-
-Use remote compute for full model training. The local regression suite's synthetic training is deliberately small; it is still an execution of training code, not merely a static check.
+Synthetic training verifies implementation behavior, not predictive performance. See [historical reports](reports/README.md) for the scope of earlier measurements.

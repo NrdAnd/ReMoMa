@@ -22,9 +22,11 @@ The horizon counts events, not seconds. These are point-to-point labels; they ar
 
 ## Features
 
-The two base channels are price relative to the current sample's best-level mid-price and global quantile-binned volume. `normalize_prices: false` preserves raw prices and generally requires `feature_dtype: float32` to avoid float16 overflow.
+The two base channels are relative price `(price_at_lag - current_mid) / current_mid` and global quantile-binned volume. `current_mid` is the best-level mid-price at the prediction origin; the same reference is used for all nodes in that window. `normalize_prices: false` preserves raw prices and generally requires `feature_dtype: float32` to avoid float16 overflow.
 
-Optional channels are `spread`, `level_imbalance`, `depth_imbalance`, `microprice`, `order_trade_flow`, `order_limit_flow`, `order_cancel_flow`, and `side`. Their order is part of the checkpoint contract. Duplicate or unknown feature names are rejected. The recurrent and GNN constructors both derive their input width from this list.
+Optional channels are `spread`, `level_imbalance`, `depth_imbalance`, `microprice`, `order_trade_flow`, `order_limit_flow`, `order_cancel_flow`, and `side`. Order-flow channels use signed event size `q` and resting-order direction `d` (+1 bid, −1 ask): trade `−q*d` for types 4/5, limit `q*d` for type 1, and cancel `−q*d` for types 2/3. At each lag, each flow is divided by total ten-level depth, clipped to [−5, 5], and repeated across nodes at that lag; it is not a window sum.
+
+Feature order is part of the checkpoint contract. Duplicate or unknown feature names are rejected. The recurrent and GNN constructors both derive their input width from this list.
 
 Volume quantiles are fitted only on rows covered by training input windows, before class balancing or sample caps. Raw non-finite/negative volumes and non-finite prices/features are rejected. Store data-cleaning provenance separately from model configuration.
 
@@ -34,7 +36,7 @@ Volume quantiles are fitted only on rows covered by training input windows, befo
 
 `by_lag` divides each file chronologically according to train/validation ratios. A sample uses raw rows `[t-n_lags, t+k]`. The implementation removes `n_lags + k` candidate samples before each boundary so adjacent splits do not share input or target rows. Short files may therefore produce empty splits and fail validation.
 
-`by_lag` still uses the same trading days across all three subsets and does not measure generalization to a new day. The primary GNN example now defaults to `by_file`. Existing recurrent exploratory presets retain their explicit split choices.
+`by_lag` still uses the same trading days across all three subsets and does not measure generalization to a new day. The primary GNN example defaults to `by_file`. Existing recurrent exploratory presets retain their explicit split choices.
 
 `data.subsample_seed` determines balanced training and validation/test subsamples. `training.seed` determines initialization and training randomness independently. Validation/test retain their natural class distributions unless a cap selects a random subset. A fixed training seed alone is not a guarantee of bitwise identical results across hardware or library versions.
 

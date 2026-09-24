@@ -1,12 +1,12 @@
 # Research history
 
-This English record consolidates the original working report. Values below are historical observations, not measurements repeated during integration. Consult [interpretation limits](README.md) before comparisons.
+This record summarizes the original experiments. The values have not been reproduced with the current pipeline. Consult [interpretation limits](README.md) before comparisons.
 
 ## Initial representation and training
 
 The original experiments used five CSCO LOBSTER orderbook days, forty columns per snapshot, and a TMFG with 3,020 nodes and 9,054 undirected edges. The implementation moved feature construction from the training loop to memory-mapped arrays. It explored graph convolutions, positional lag features, normalization, graph pooling, temporal convolutions, and decision thresholds.
 
-A significant early defect produced a constant zero volume channel: non-finite values propagated into percentile bin edges. The binner now filters non-finite fit values, maps non-finite transformed volumes to the lowest bin, and rejects degenerate quantile edges.
+A significant early defect produced a constant zero volume channel: non-finite values propagated into percentile bin edges. The binner filters non-finite fit values and rejects degenerate quantile edges. Current preprocessing rejects non-finite or negative raw volumes before binning; its standalone fallback for non-finite values is not a data-cleaning policy.
 
 ## Earlier reported progression
 

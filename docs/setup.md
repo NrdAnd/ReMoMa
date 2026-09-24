@@ -57,9 +57,9 @@ python scripts/check_repository.py
 
 Create `data/raw/` and place the original matching orderbook files there. Filenames must end in `_orderbook_10.csv`. Lower-level configurations without an explicit `data.raw_files` list use lexical filename order for zero-based file indices; their main examples expect at least five files: train `[0, 1, 2]`, validation `[3]`, test `[4]`. The complete pipeline instead selects explicit ISO dates and freezes the resolved file list in each run.
 
-Use a private complete configuration under `configs/local/` to change paths, file indices, sampling, or hardware settings. All paths inside YAML configurations are relative to the repository root; absolute paths are supported. Editable installs locate that root automatically. For a wheel installation, set `REMOMA_ROOT` to the checkout path before importing the package, or run from the checkout root. Existing local `lobster_cisco/` folders are not moved or published automatically.
+Use a private complete configuration under `configs/local/` to change paths, file indices, sampling, or hardware settings. All paths inside YAML configurations are relative to the repository root; absolute paths are supported. Editable installs locate that root automatically. For a wheel installation, set `REMOMA_ROOT` to the checkout path before importing the package, or run from the checkout root.
 
-Order-flow features additionally require exact matching `_message_10.csv` filenames and equal row counts. Historical local data was reported to have mismatched rows on three days; the loader fails explicitly on such pairs. Do not truncate or pair files solely by their length.
+Order-flow features additionally require exact matching `_message_10.csv` filenames and equal row counts. The loader rejects mismatched pairs. Equal counts alone cannot establish alignment after files have been modified; use original paired exports.
 
 ## Research notebooks
 

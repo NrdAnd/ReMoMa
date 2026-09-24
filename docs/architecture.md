@@ -42,7 +42,7 @@ GAT variants use flattened PyG batches because GATConv does not accept the share
 
 `models/gnn/__init__.py` owns GNN registrations and static-batching capability. `models/recurrent/__init__.py` owns recurrent registrations. The common factory combines the two registries, so a new model in one family does not require changing the other family's implementation.
 
-The order of precedence is constructor default, shared `model` setting, selected `model.overrides.<type>` setting, then CLI overrides written into that selected preset. `--hidden` sets `hidden_channels` for GNNs and `hidden_dim` for recurrent models. `--model` also updates `model.family`; a mismatched YAML family/type is rejected.
+For architecture parameters selected by the factory, precedence is factory fallback, shared `model` setting, selected `model.overrides.<type>` setting, then CLI overrides written into that preset. The GNN `add_lag_feature` flag is read directly from `model`, outside this override chain. `--hidden` sets `hidden_channels` for GNNs and `hidden_dim` for recurrent models. `--model` also updates `model.family`; a mismatched YAML family/type is rejected.
 
 The recurrent classifier converts canonical tensor order to adjacency order before inference. It supports `all_lags` and `lag0` readouts, optional synthetic same-feature temporal edges, and optional edge weights. It is not a streaming RNN carrying hidden state between market samples: each lag-window sample initializes its own encoded node states.
 
